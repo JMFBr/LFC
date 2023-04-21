@@ -1,8 +1,8 @@
 clear;clc;close all
 %%
 
-N_0  = 4; % #Planes
-N_s0 = 11;  % #Sats/planes
+N_0  = 4;  % #Planes
+N_s0 = 3; % #Sats/planes
 N_c  = 2; % Phasing parameter
 
 L = [N_0, 0;
@@ -39,6 +39,7 @@ end
 xlabel('M (rad)')
 ylabel('\Omega (rad)')
 
+C_deg = C*180/pi;
 
 figure()
 scatter(C(:,:,2), C(:,:,1))

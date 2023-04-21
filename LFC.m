@@ -1,9 +1,9 @@
 clear;clc;close all
 %%
 
-N_TS = 44; % Total #Satellites
+N_TS = 44; 
 
-N_0 = zeros(); % #Planes
+N_0 = zeros(); 
 j = 0;
 
 for i = 1:N_TS
@@ -15,9 +15,9 @@ end
 
 N_s0 = N_TS./N_0; % #Sats/plane
 
-for k = 1:length(N_0)                                                       % LFC For all pairs N_0//N_s0 possible for 1 N_TS   
+for k = 1:length(N_0)              n                                         % LFC For all pairs N_0//N_s0 possible for 1 N_TS   
     
-    N_c = linspace(1,N_0(k),N_0(k));
+    N_c = [1:N_0(k)];
 
     for m = 1:length(N_c)                                                   % LFC for all N_c in the range
 
