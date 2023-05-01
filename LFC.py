@@ -1,14 +1,14 @@
 import numpy as np
 
 ## PRUEBA
-# #N_TS = 44 # Total number of satellites
-#
-# N_0 = 4 # Number of planes
-# N_s0 = 11 # Number of sats/plane
-# N_c = 2 # Phasing parameter
+N_TS = 44 # Total number of satellites
 
 def LFC(n_0,n_s0,n_c):
     # -- Computes 1 LFC given Nc, No and Nso
+
+    n_0 = int(n_0)
+    n_s0 = int(n_s0)
+    n_c = int(n_c)
 
     L = np.array([[n_0, 0], [n_c, n_s0]])
     C = np.zeros((n_0, n_s0, 2)) # % Plane x Sat x Omega&M
@@ -24,14 +24,16 @@ def LFC(n_0,n_s0,n_c):
 def NumSats(n_TS):
     # -- Given Total number of satellites N_TS, compute N0, Ns0 and Nc
 
-    n_0 = [] # Number of planes, Initialize n_0
+    # Create an array of integers from 1 to N_TS
+    all_integers = np.arange(1, n_TS + 1)
+    # Find the divisors of N_TS using boolean indexing
+    divisors = all_integers[n_TS % all_integers == 0]
 
-    for i in range(1, n_TS+1): # Find multiples of n_TS
-        if n_TS % i == 0:
-            n_0.append(i)
+    n_0 = np.zeros(divisors.shape)
+    n_0[:] = divisors # Number of planes, dim(1x#multiples)
 
+    n_s0 = n_TS/n_0  # Number of sats/plane, dim(1x#multiples)
 
-    n_s0 = n_TS/n_0 # Number of sats/plane
 
     for j in range(len(n_0)):
         n_c = np.arange(1, n_0[j] + 1)
@@ -39,8 +41,7 @@ def NumSats(n_TS):
         for k in range(len(n_c)):
             C = LFC(n_0[j], n_s0[j], n_c[k])
 
-    return C
-
+            ## HERE COMPUTE COVERAGE AND DISTANCE and all the things
 
 
 
