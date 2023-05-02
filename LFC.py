@@ -66,7 +66,13 @@ def LFC(n_0,n_s0,n_c):
             B = 2*np.pi*np.array([[i - 1], [j - 1]])
             C[i-1,j-1,:] = np.transpose(np.linalg.solve(L, B))
 
-    return C
+    Omega = C[:, :, 0]  # RAAN matrix
+    M = C[:, :, 1]  # Mean anomaly matrix
+
+    M_bool = np.logical_and(M >= 0, M <= 2 * np.pi)  # Check if values are between 0 and 2*pi
+    M[~M_bool] += 2 * np.pi  # Set negative values of M to M+2*pi
+
+    return C #, Omega, M
 
 
 def NumSats(n_TS):
