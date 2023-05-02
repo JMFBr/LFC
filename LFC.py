@@ -5,16 +5,16 @@ N_TS = 44 # Total number of satellites
 
 # Data
 mu = 3.986e14 # [m3/s2], Earth standard gravitational parameter
-RE = 6371e3   # [m], Earth Radius
-h = 580e3    # [m], Altitude
+RE = 6371e3 # [m], Earth Radius
+h = 580e3 # [m], Altitude
 
 a = RE + h
 e = 0
 i = 72*np.pi/180 # [rad], Inclination
-om = 0*np.pi/180  # [rad], argument of the perigee
+om = 0*np.pi/180 # [rad], argument of the perigee
 
 
-def MinDist(M, Omega):
+def MinDist(Omega, M):
     # -- Compute rho_min = The closest approach between the two satellites in two circular orbits
     # INPUTS: Matrices for M & Omega from LFC method
 
@@ -72,7 +72,7 @@ def LFC(n_0,n_s0,n_c):
     M_bool = np.logical_and(M >= 0, M <= 2 * np.pi)  # Check if values are between 0 and 2*pi
     M[~M_bool] += 2 * np.pi  # Set negative values of M to M+2*pi
 
-    return C #, Omega, M
+    return C, Omega, M
 
 
 def NumSats(n_TS):
@@ -99,12 +99,14 @@ def ConstFam(n_TS):
     n_0, n_s0 = NumSats(n_TS)
 
     for j in range(len(n_0)):
-        n_c = np.arange(1, n_0[j] + 1)
+        n_c = np.arange(1, n_0[j]) # Nc is in the range [1, N0-1]
 
         for k in range(len(n_c)):
-            C = LFC(n_0[j], n_s0[j], n_c[k])
-
+            C, Omega, M = LFC(n_0[j], n_s0[j], n_c[k])
             ## HERE COMPUTE COVERAGE AND DISTANCE and all the things
+
+            min_dist = MinDist(Omega, M)
+
 
 
 

@@ -15,9 +15,9 @@ end
 
 N_s0 = N_TS./N_0; % #Sats/plane
 
-for k = 1:length(N_0)              n                                         % LFC For all pairs N_0//N_s0 possible for 1 N_TS   
+for k = 1:length(N_0)                                                       % LFC For all pairs N_0//N_s0 possible for 1 N_TS   
     
-    N_c = [1:N_0(k)];
+    N_c = [1:N_0(k)-1];
 
     for m = 1:length(N_c)                                                   % LFC for all N_c in the range
 

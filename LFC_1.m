@@ -1,9 +1,9 @@
-clear;clc;%close all
+clear;clc;close all
 %%
 
 N_0  = 4; % #Planes
 N_s0 = 5; % #Sats/planes
-N_c  = 4; % Phasing parameter
+N_c  = 4; % Phasing parameter, [1, N_0-1]
 
 L = [N_0, 0;
     N_c, N_s0]; % Lattice matrix
