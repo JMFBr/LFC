@@ -1,8 +1,8 @@
-clear;clc;close all
+clear;clc;%close all
 %%
 
 N_0  = 4; % #Planes
-N_s0 = 1; % #Sats/planes
+N_s0 = 5; % #Sats/planes
 N_c  = 4; % Phasing parameter
 
 L = [N_0, 0;
@@ -35,7 +35,8 @@ end
 % yticks([ 0 pi 2*pi 3*pi])
 % yticklabels({'0','\pi','2\pi','3\pi'})
 % xlim([0, 2*pi])
-% ylim([0, 2*pi])
+ylim([-10, 15])
+title('Nc=1')
 xlabel('M (rad)')
 ylabel('\Omega (rad)')
 
@@ -47,7 +48,7 @@ grid on
 ylabel('\Omega (rad)')
 xlabel('M (rad)')
 
-%% OEs
+%% OEs and plot orbits
 
 mu = 3.986e14; % [m3/s2], Earth standard gravitational parameter
 RE = 6371e3;   % [m], Earth Radius
@@ -85,7 +86,35 @@ end
 
 
 
+%% MINIMUM DISTANCE CONSTRAINT (REF. 30)
 
+% rho_min = Closest approach between the two satellites in two circular orbits
+
+% DO = DeltaOmega, Delta RAAN bw circular orbits
+% DM = DeltaMeanAnomaly, Delta mean anomaly bw satellites
+
+% sufficient to evaluate the minimum distance between the first satellite,
+% with all the other satellites staying on different orbital planes
+
+rho_min = zeros();
+
+
+for m = 1:size(th,1) 
+    for n = 1:size(th,2)
+
+        DM = M(m,n) - M(1,1); % [rad]. Take first satellite as reference
+        DO = OM(m,n) - OM(1,1);
+
+        DF = DM - 2*atan(-cos(i)*tan(DO/2));
+
+        rho_min(m,n) = 2*abs(sqrt(1 + cos(i)^2 + sin(i)^2-cos(DO))/2)*sin(DF/2); % [rad]
+
+    end
+
+end
+
+d_min = rho_min*(RE + h); % [m]
+d_min_km = d_min/1000
 
 
 
