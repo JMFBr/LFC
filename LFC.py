@@ -90,6 +90,30 @@ def NumSats(n_TS):
 
     return n_s0, n_0
 
+def solidAngle():
+    # Compute solid angle of the sensor given the swath width
+
+    h0 = 500e3 # Altitude used in the sensor information
+    SW = 120e3 # Sensor Swath Width
+    psi = SW / (2 * RE)
+
+    # Using Newtons method, solve: psi = -eps + acos(RE/(RE + h0)*cos(eps)) for elevation angle given psi, RE and h
+    err = 1e-8  # Error
+    eps = 1 * np.pi / 180  # [rad], Initial value
+    div = 1
+
+    while np.abs(div) > err:
+        f = -eps + np.arccos(RE / (RE + h0) * np.cos(eps)) - psi  # Equation to solve = 0
+        df = -1 + 1 / (np.sqrt(1 - (RE / (RE + h0) * np.cos(eps)) ** 2)) * RE / (RE + h0) * np.sin(
+            eps)  # Derivative of equation
+
+        div = f / df
+        eps = eps - div
+
+    alpha = np.pi / 2 - psi - eps  # [rad], solid angle
+
+    return alpha
+
 
 def ConstFam(n_TS):
     # -- 1. Loop all combination pairs n_0&n_s0

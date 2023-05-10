@@ -1,9 +1,9 @@
 clear;clc;close all
 %%
 
-N_0  = 4; % #Planes
+N_0  = 3; % #Planes
 N_s0 = 5; % #Sats/planes
-N_c  = 4; % Phasing parameter, [1, N_0-1]
+N_c  = 2; % Phasing parameter, [1, N_0-1]
 
 L = [N_0, 0;
     N_c, N_s0]; % Lattice matrix
@@ -25,8 +25,8 @@ for i = 1:N_0
         fun1 = @(m) (2*pi*(i-1)/N_0);        
         fun2 = @(m) ((2*pi*(j-1) - m*N_s0)/N_c);
 
-        fplot(fun1,'LineWidth',1.5)
-        fplot(fun2)        
+        fplot(fun1, '--', 'LineWidth',1.5)
+        fplot(fun2, 'LineWidth',1.5)        
 
     end
 end
@@ -35,18 +35,18 @@ end
 % yticks([ 0 pi 2*pi 3*pi])
 % yticklabels({'0','\pi','2\pi','3\pi'})
 % xlim([0, 2*pi])
-ylim([-10, 15])
-title('Nc=1')
+ylim([-5, 5])
+title('N_c = 1')
 xlabel('M (rad)')
 ylabel('\Omega (rad)')
 
-C_deg = C*180/pi;
+% C_deg = C*180/pi;
 
-figure()
-scatter(C(:,:,2), C(:,:,1))
+%figure()
+scatter(C(:,:,2), C(:,:,1), 'filled', 'MarkerFaceColor',[0 0 .7])
 grid on
-ylabel('\Omega (rad)')
-xlabel('M (rad)')
+% ylabel('\Omega (rad)')
+% xlabel('M (rad)')
 
 %% OEs and plot orbits
 
@@ -59,9 +59,11 @@ e  = 0;
 i  = 72*pi/180; % [rad], Inclination
 om = 0*pi/180;  % [rad], argument of the perigee
 
+tau = 2*pi*sqrt((RE + h)^3/mu);
+
 OM = C(:,:,1); % [rad], random RAAN value from the LFC computation
 M  = C(:,:,2); % [rad], random Mean Anomaly value from the LFC computation
-th  = M; % Mean anomaly = to Eccentric anomaly = to true anomaly for e=0
+th = M; % Mean anomaly = to Eccentric anomaly = to true anomaly for e=0
 
 
 
@@ -78,7 +80,7 @@ for k = 1:size(th,1)
 
         kepEl = [a, e, i, OM(k,l), om, th(k,l)];
         [X, Y, Z] = plotOrbit(kepEl, mu, th1, th2, stepTh);
-        plot3(X./1000, Y./1000, Z./1000, 'Color','red')
+        plot3(X./1000, Y./1000, Z./1000, 'Linewidth', 1.5, 'Color','red')
 
     end
 

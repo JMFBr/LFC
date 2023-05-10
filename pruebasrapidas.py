@@ -34,50 +34,27 @@ om = 0*np.pi/180  # [rad], argument of the perigee
 
 C = LFC(N_0, N_s0, N_c)
 
-Omega = C[:, :, 0] # RAAN matrix
-M = C[:, :, 1] # Mean anomaly matrix
 
-M_bool = np.logical_and(M >= 0, M <= 2*np.pi) # Check if values are between 0 and 2*pi
-M[~M_bool] += 2*np.pi # Set negative values of M to M+2*pi
+## TARGET ACCESS
 
+h0 = 500e3  # Altitude used in the sensor information
+SW = 120e3
+psi = SW / (2 * RE)
 
-## MINIMUM DISTANCE
+# Using Newtons method, solve: psi = -eps + acos(RE/(RE + h0)*cos(eps)) for elevation angle given psi, RE and h
+err = 1e-8  # Error
+eps = 1 * np.pi / 180  # [rad], Initial value
+div = 1
 
-#  rho_min = The closest approach between the two satellites in two circular orbits
-#
-#  DO = DeltaOmega, Delta RAAN bw circular orbits
-#  DM = DeltaMeanAnomaly, Delta mean anomaly bw satellites
-#
-#  sufficient to evaluate the minimum distance between the first satellite,
-#  with all the other satellites staying on different orbital planes
+while np.abs(div) > err:
+    f = -eps + np.arccos(RE / (RE + h0) * np.cos(eps)) - psi  # Equation to solve = 0
+    df = -1 + 1 / (np.sqrt(1 - (RE / (RE + h0) * np.cos(eps)) ** 2)) * RE / (RE + h0) * np.sin(
+        eps)  # Derivative of equation
 
-# Initialize rho_min matrix
+    div = f / df
+    eps = eps - div
 
-rho_min = np.zeros(M.shape)
-
-for m in range(M.shape[0]):
-    for n in range(M.shape[1]):
-        DM = M[m, n] - M[0, 0]  # [rad]. Take first satellite as reference
-        DO = Omega[m, n] - Omega[0, 0]
-
-        DF = DM - 2 * np.arctan(-np.cos(i) * np.tan(DO/2))
-
-        rho_min[m, n] = 2 * np.abs(np.sqrt(1 + np.cos(i)**2 + np.sin(i)**2 - np.cos(DO))/2) * np.sin(DF/2)  # [rad]
-
-d_min = rho_min * (RE + h)  # [m]
-d_min_km = d_min / 1000
-
-# Find the minimum distance among all the satellite pairs (Different to 0)
-non_zero_abs_vals = np.abs(d_min[d_min != 0])
-if len(non_zero_abs_vals) == 0:
-    min_distance = None
-else:
-    min_distance = np.min(non_zero_abs_vals) # [m]
-
-print(min_distance/1000)
-
-
-
+alpha = np.pi / 2 - psi - eps  # [rad], solid angle
 
 
 
