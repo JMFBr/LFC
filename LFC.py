@@ -13,9 +13,12 @@ e = 0
 i = 72*np.pi/180 # [rad], Inclination
 om = 0*np.pi/180 # [rad], argument of the perigee
 
+twin_d = 2*60 # [s], Twin fixed separation distance WAC-NAC
+
 
 def MinDist(Omega, M):
     # -- Compute rho_min = The closest approach between the two satellites in two circular orbits
+    # -- Distance bw satellites in different orbital planes
     # INPUTS: Matrices for M & Omega from LFC method
 
     #  DO = DeltaOmega, Delta RAAN bw circular orbits
@@ -51,6 +54,28 @@ def MinDist(Omega, M):
     return min_distance
 
 
+def MaxDist():
+    # -- Maximum allowable distance among satellites in same plane
+    # -- Set by ISL, satellites must see each other
+
+    # theta = angle bw 2 satellites
+    # alpha = Maximum angle at which 2 satellites see each other, determined by taking into account atmospheric
+    # effects at h=100km
+
+    h_atm = 100e3 # [m], altitude at which we take into account atmospheric effects
+
+    alpha = np.arccos((RE+h_atm)/(RE+h)) # [rad], 2 sates see each other if theta<=2*alpha
+
+    max_dist = 2*alpha*(RE+h)
+
+    return max_dist
+
+
+
+
+
+
+
 def LFC(n_0,n_s0,n_c):
     # -- Computes 1 LFC given Nc, No and Nso
 
@@ -76,7 +101,7 @@ def LFC(n_0,n_s0,n_c):
 
 
 def NumSats(n_TS):
-    # -- Given Total number of satellites N_TS, compute N0, Ns0 and Nc
+    # -- Given Total number of satellites N_TS, compute all [N0 Ns0] possible pairs
 
     # Create an array of integers from 1 to N_TS
     all_integers = np.arange(1, n_TS + 1)
@@ -89,6 +114,7 @@ def NumSats(n_TS):
     n_s0 = n_TS/n_0  # Number of sats/plane, dim(1x#multiples)
 
     return n_s0, n_0
+
 
 def solidAngle():
     # Compute solid angle of the sensor given the swath width
@@ -129,7 +155,8 @@ def ConstFam(n_TS):
             C, Omega, M = LFC(n_0[j], n_s0[j], n_c[k])
             ## HERE COMPUTE COVERAGE AND DISTANCE and all the things
 
-            min_dist = MinDist(Omega, M)
+            min_dist = MinDist(Omega, M) # Min distance inter-planes
+            max_dist = MaxDist() # Max distance within 1 plane
 
 
 
