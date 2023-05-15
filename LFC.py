@@ -151,18 +151,19 @@ def ConstFam(n_TS):
             C, Omega, M = LFC(n_0[j], n_s0[j], n_c[k])
             # CONSTELLATION OBTAINED, HERE COMPUTE COVERAGE AND DISTANCE CONSTRAINTS
 
-            # Distance constraints:
+            # MIN Distance constraint:
             min_dist = MinDist(Omega, M)  # [m], Min distance inter-planes
             if min_dist < 2*twin_d:
                 # Discard constellation if distance requirements are not met
                 continue
 
+            # MAX Distance constraint:
             WAC_dist = 2*np.pi/n_s0[j]*(RE+h)  # [m], WAC-WAC satellites distance in 1 plane
             NAC_dist = twin_d  # [m], WAC-NAC distance in 1 plane
             max_dist = MaxDist()  # [m], Max distance ISL constraint within 1 plane
 
-            if WAC_dist > (NAC_dist+max_dist):
-                # Discard constellation if ISL cannot be connected
+            if WAC_dist > (NAC_dist + max_dist):
+                # Discard constellation if ISL cannot be connected (WAC1-NAC1--WAC2)
                 continue
 
 
