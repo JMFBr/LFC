@@ -36,9 +36,9 @@ def MinDist(Omega, M):
             DM = M[m, n] - M[0, 0]  # [rad]. Take first satellite as reference
             DO = Omega[m, n] - Omega[0, 0]
 
-            DF = DM - 2 * np.arctan(-np.cos(i) * np.tan(DO / 2))
+            DF = DM - 2 * np.arctan(-np.cos(inc) * np.tan(DO / 2))
 
-            rho_min[m, n] = 2 * np.abs(np.sqrt(1 + np.cos(i) ** 2 + np.sin(i) ** 2 - np.cos(DO)) / 2) * np.sin(
+            rho_min[m, n] = 2 * np.abs(np.sqrt(1 + np.cos(inc) ** 2 + np.sin(inc) ** 2 - np.cos(DO)) / 2) * np.sin(
                 DF / 2)  # [rad]
 
     d_min = rho_min * (RE + h)  # [m]
