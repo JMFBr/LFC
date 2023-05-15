@@ -1,19 +1,20 @@
 import numpy as np
 
 ## PRUEBA
-N_TS = 44 # Total number of satellites
+N_TS = 44  # Total number of satellites
 
 # Data
-mu = 3.986e14 # [m3/s2], Earth standard gravitational parameter
-RE = 6371e3 # [m], Earth Radius
-h = 580e3 # [m], Altitude
+mu = 3.986e14  # [m3/s2], Earth standard gravitational parameter
+RE = 6371e3  # [m], Earth Radius
+h = 580e3  # [m], Altitude
 
-a = RE + h
+a = RE + h  # [m], Semi-major axis
 e = 0
-i = 72*np.pi/180 # [rad], Inclination
-om = 0*np.pi/180 # [rad], argument of the perigee
+inc = 72*np.pi/180  # [rad], Inclination
+om = 0*np.pi/180  # [rad], Argument of the perigee
 
-twin_d = 2*60 # [s], Twin fixed separation distance WAC-NAC
+twin_d = 2*60  # [s], Twin fixed separation distance WAC-NAC
+twin_d = twin_d*np.sqrt(mu/a**3)*(RE+h)  # [m]
 
 
 def MinDist(Omega, M):
@@ -56,24 +57,19 @@ def MinDist(Omega, M):
 
 def MaxDist():
     # -- Maximum allowable distance among satellites in same plane
-    # -- Set by ISL, satellites must see each other
+    # -- Set by ISL constraint, satellites must see each other
 
     # theta = angle bw 2 satellites
     # alpha = Maximum angle at which 2 satellites see each other, determined by taking into account atmospheric
     # effects at h=100km
 
-    h_atm = 100e3 # [m], altitude at which we take into account atmospheric effects
+    h_atm = 100e3  # [m], altitude at which we take into account atmospheric effects
 
-    alpha = np.arccos((RE+h_atm)/(RE+h)) # [rad], 2 sates see each other if theta<=2*alpha
+    alpha = np.arccos((RE+h_atm)/(RE+h))  # [rad], 2 sates see each other if theta<=2*alpha
 
     max_dist = 2*alpha*(RE+h)
 
     return max_dist
-
-
-
-
-
 
 
 def LFC(n_0,n_s0,n_c):
@@ -84,12 +80,12 @@ def LFC(n_0,n_s0,n_c):
     n_c = int(n_c)
 
     L = np.array([[n_0, 0], [n_c, n_s0]])
-    C = np.zeros((n_0, n_s0, 2)) # % Plane x Sat x Omega&M
+    C = np.zeros((n_0, n_s0, 2))  # % Plane x Sat x Omega&M
 
-    for i in range(1, n_0+1):   # Loop 1:N_0, si no especificas range inicial, el loop empieza en i=0
+    for i in range(1, n_0+1):   # Loop 1:N_0, if initial range not specified, loop starts in i=0
         for j in range(1, n_s0+1):
             B = 2*np.pi*np.array([[i - 1], [j - 1]])
-            C[i-1,j-1,:] = np.transpose(np.linalg.solve(L, B))
+            C[i-1,j-1,:] = np.transpose(np.linalg.solve(L, B)) # Matrix: [Num planes x Num sats plane x 2]
 
     Omega = C[:, :, 0]  # RAAN matrix
     M = C[:, :, 1]  # Mean anomaly matrix
@@ -153,10 +149,22 @@ def ConstFam(n_TS):
 
         for k in range(len(n_c)):
             C, Omega, M = LFC(n_0[j], n_s0[j], n_c[k])
-            ## HERE COMPUTE COVERAGE AND DISTANCE and all the things
+            # CONSTELLATION OBTAINED, HERE COMPUTE COVERAGE AND DISTANCE CONSTRAINTS
 
-            min_dist = MinDist(Omega, M) # Min distance inter-planes
-            max_dist = MaxDist() # Max distance within 1 plane
+            # Distance constraints:
+            min_dist = MinDist(Omega, M)  # [m], Min distance inter-planes
+            if min_dist < 2*twin_d:
+                # Discard constellation if distance requirements are not met
+                continue
+
+            WAC_dist = 2*np.pi/n_s0[j]*(RE+h)  # [m], WAC-WAC satellites distance in 1 plane
+            NAC_dist = twin_d  # [m], WAC-NAC distance in 1 plane
+            max_dist = MaxDist()  # [m], Max distance ISL constraint within 1 plane
+
+            if WAC_dist > (NAC_dist+max_dist):
+                # Discard constellation if ISL cannot be connected
+                continue
+
 
 
 

@@ -57,6 +57,8 @@ while np.abs(div) > err:
 alpha = np.pi / 2 - psi - eps  # [rad], solid angle
 
 
+twin_d = 2*60 # [s], Twin fixed separation distance WAC-NAC
+twin_d = twin_d*np.sqrt(mu/a**3)*(RE+h)
 
 
 
