@@ -1,4 +1,5 @@
 import numpy as np
+from numpy import linalg as LA
 
 ## PRUEBA
 N_TS = 44  # Total number of satellites
