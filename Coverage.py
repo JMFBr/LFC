@@ -14,9 +14,10 @@ om = 0*np.pi/180  # [rad], Argument of the perigee
 
 
 f_acr = 6.8*np.pi/180  # [rad],  From function solid angle
+f_al = 3*np.pi/180  # [rad], Invented
 
 
-def ra_and_dec_from_r(r):
+def ra_and_dec_from_r(r):  # D
     # Calculates the right ascension (longitude) and the declination (latitude)
     # from the geocentric equatorial position vector
 
@@ -73,13 +74,13 @@ def g_t(a, r_rel, v_rel, f_acr):  # D
     return ra_M, ra_m, dec_M, dec_m
 
 
-def unit_v(v):
+def unit_v(v):  # D
     u_v = v / LA.norm(v, axis=0)  # direction cosine
 
     return u_v
 
 
-def dot_p(r_sat, r_t):
+def dot_p(r_sat, r_t):  # D
     if np.ndim(r_sat) == 4:
         ang = np.einsum('mois,mt->tois', r_sat, r_t)
     elif np.ndim(r_sat) == 3:
@@ -92,7 +93,7 @@ def dot_p(r_sat, r_t):
     return ang
 
 
-def projections(r, v, r_t):
+def projections(r, v, r_t):  # D
     # Project Target coordinates into [ur, uh, uy] RF
     u_r = unit_v(r)
     u_v = unit_v(v)
@@ -118,7 +119,7 @@ def projections(r, v, r_t):
     return p1, p2, p3
 
 
-def filt_steps_fun(r, v, r_t, a_alfa):
+def filt_steps_fun(r, v, r_t, a_alfa):  # D
     dist_tol = 20  # [km] error tolerance in the cone sensor
     alf_tol = np.arctan(dist_tol / RE)
 
@@ -134,7 +135,7 @@ def filt_steps_fun(r, v, r_t, a_alfa):
     # phi = np.arctan2(p3, p1)
     # filt_steps_ac = np.absolute(phi) <= a_alfa
 
-    filt_steps_ac = np.absolute(p3) / p1 <= np.tan(a_alfa - alf_tol) # Boolean, True if tan(alpha_t)<=tan(alpha_s)
+    filt_steps_ac = np.absolute(p3) / p1 <= np.tan(a_alfa - alf_tol)  # Boolean, True if tan(alpha_t)<=tan(alpha_s)
     filt_steps_ac[~mask_p1] = False  # Values in mask_p1 that correspond to False are set to False in filt_steps_ac
 
     print('across filter ok ', np.sum(filt_steps_ac))
@@ -142,13 +143,13 @@ def filt_steps_fun(r, v, r_t, a_alfa):
     return filt_steps_ac
 
 
-def filt_pop(a, r, v, r_t, f_acr):
+def filt_pop(a, r, v, r_t, f_acr):  # D
     eta = a / RE
     a_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))
     a_alfa = a_alfa.T
 
-    filt_steps = filt_steps_fun(r, v, r_t, a_alfa) # Boolean, True is target is covered
-
-    cov_stepss = np.array(np.nonzero(filt_steps[:]))
+    filt_steps = filt_steps_fun(r, v, r_t, a_alfa)  # Boolean, True is target is covered
+    cov_stepss = np.array(np.nonzero(filt_steps[:]))  # Return number of the Indices of filt_steps that are True aka
+    # the covered targets
 
     return cov_stepss
