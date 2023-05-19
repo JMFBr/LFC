@@ -186,6 +186,27 @@ def ConstFam(n_TS):
             const_matrix[:, 3] = om  # [rad]
             const_matrix = np.c_[const_matrix, Omega, M]  # Constellation matrix: (Nts x 6 OEs)
 
+            # Transform constellation matrix: OEs to ECI (Nts x 6)
+
+            # Transform constellation matrix: ECI to ECEF (Nts x 6)
+
+            # Read target list
+
+            # Transform target matrix: LatLon to ECEF
+
+
+            ## COVERAGE AND TARGET ACCESS
+
+            # Compute timestep
+
+            # Create coverage matrix: (Num targets x TimeStep)
+
+            # Transform target matrix: ECEF to UrUhUy
+
+
+
+
+
 
 
 

@@ -61,3 +61,58 @@ const_matrix[:, 2] = inc  # [rad]
 const_matrix[:, 3] = om  # [rad]
 const_matrix = np.c_[const_matrix, Omega, M]  # Constellation matrix: (Nts x 6 OEs)
 
+
+def kep2eci(elements, mu_earth, t_0, t):  # R
+    """
+    Converts Keplerian orbital elements to Earth-centered inertial coordinates.
+    Parameters:
+    -----------
+    elements : array_like
+        Orbital elements in the following order: semi-major axis (a) [m], eccentricity (e),
+        inclination (i) [deg], argument of periapsis (omega) [deg], right ascension of ascending node (Omega) [deg],
+        mean anomaly (M) [deg].
+    Returns:
+    --------
+    x_eci : array_like
+        Earth-centered inertial coordinates in meters: x, y, z (m).
+    """
+    # Define Keplerian orbital elements
+    a, e, i, omega, Omega = elements
+    # Convert orbital elements to radians
+    i = np.deg2rad(i)
+    omega = np.deg2rad(omega)
+    Omega = np.deg2rad(Omega)
+    T = 2 * np.pi * np.sqrt(a ** 3 / mu_earth)  # Orbital period
+    M = 2*np.pi*(t_0 + t)/T  # Mean anomaly at current position
+    # Calculate eccentric anomaly
+    E = M
+    while True:
+        E_new = E + (M - E + e * np.sin(E)) / (1 - e * np.cos(E))
+        if abs(E_new - E) < 1e-8:
+            break
+        E = E_new
+    if E < 0:
+        E += 2*np.pi
+    # Calculate true anomaly corresponding to the current time t
+    nu = 2 * np.arctan(np.sqrt((1 + e) / (1 - e)) * np.tan(E / 2))
+    if nu < 0:
+        nu += 2*np.pi
+    # Calculate semi-latus rectum and mean motion
+    p = a * (1 - e ** 2)
+    # Calculate distance from Earth to satellite
+    r = p / (1 + e * np.cos(nu))
+    # Calculate position and velocity in perifocal coordinates
+    r_pqw = np.array([r * np.cos(nu), r * np.sin(nu), 0])
+    # v_pqw = np.sqrt(mu_earth / p)*np.array([-np.sin(nu), e + np.cos(nu), 0])
+    # Transformation matrix from perifocal to geocentric equatorial coordinates
+    R_pqw_to_eci = np.array([
+        [np.cos(Omega) * np.cos(omega) - np.sin(Omega) * np.sin(omega) * np.cos(i),
+         -np.cos(Omega) * np.sin(omega) - np.sin(Omega) * np.cos(omega) * np.cos(i), np.sin(Omega) * np.sin(i)],
+        [np.sin(Omega) * np.cos(omega) + np.cos(Omega) * np.sin(omega) * np.cos(i),
+         -np.sin(Omega) * np.sin(omega) + np.cos(Omega) * np.cos(omega) * np.cos(i), -np.cos(Omega) * np.sin(i)],
+        [np.sin(i) * np.sin(omega), np.sin(i) * np.cos(omega), np.cos(i)]
+    ])
+    # Convert
+    x_eci = np.dot(R_pqw_to_eci, r_pqw)
+    return x_eci
+
