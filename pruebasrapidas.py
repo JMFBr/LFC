@@ -62,6 +62,8 @@ const_matrix[:, 3] = om  # [rad]
 const_matrix = np.c_[const_matrix, Omega, M]  # Constellation matrix: (Nts x 6 OEs)
 
 
+## CONSTELLATION TO ECI:
+
 def kep2eci(elements, mu_earth, t_0, t):  # R
     """
     Converts Keplerian orbital elements to Earth-centered inertial coordinates.
@@ -69,8 +71,8 @@ def kep2eci(elements, mu_earth, t_0, t):  # R
     -----------
     elements : array_like
         Orbital elements in the following order: semi-major axis (a) [m], eccentricity (e),
-        inclination (i) [deg], argument of periapsis (omega) [deg], right ascension of ascending node (Omega) [deg],
-        mean anomaly (M) [deg].
+        inclination (i) [rad], argument of periapsis (omega) [rad], right ascension of ascending node (Omega) [rad],
+        mean anomaly (M) [rad].
     Returns:
     --------
     x_eci : array_like
@@ -78,10 +80,7 @@ def kep2eci(elements, mu_earth, t_0, t):  # R
     """
     # Define Keplerian orbital elements
     a, e, i, omega, Omega = elements
-    # Convert orbital elements to radians
-    i = np.deg2rad(i)
-    omega = np.deg2rad(omega)
-    Omega = np.deg2rad(Omega)
+
     T = 2 * np.pi * np.sqrt(a ** 3 / mu_earth)  # Orbital period
     M = 2*np.pi*(t_0 + t)/T  # Mean anomaly at current position
     # Calculate eccentric anomaly
@@ -103,7 +102,7 @@ def kep2eci(elements, mu_earth, t_0, t):  # R
     r = p / (1 + e * np.cos(nu))
     # Calculate position and velocity in perifocal coordinates
     r_pqw = np.array([r * np.cos(nu), r * np.sin(nu), 0])
-    # v_pqw = np.sqrt(mu_earth / p)*np.array([-np.sin(nu), e + np.cos(nu), 0])
+    v_pqw = np.sqrt(mu_earth / p)*np.array([-np.sin(nu), e + np.cos(nu), 0])
     # Transformation matrix from perifocal to geocentric equatorial coordinates
     R_pqw_to_eci = np.array([
         [np.cos(Omega) * np.cos(omega) - np.sin(Omega) * np.sin(omega) * np.cos(i),
@@ -114,5 +113,30 @@ def kep2eci(elements, mu_earth, t_0, t):  # R
     ])
     # Convert
     x_eci = np.dot(R_pqw_to_eci, r_pqw)
-    return x_eci
+    v_eci = np.dot(R_pqw_to_eci, v_pqw)
+
+    return x_eci, v_eci
+
+
+elements = const_matrix[0, 0:5]  # For satellite 1
+t_0 = 0
+t = 0
+
+X_eci, V_eci = kep2eci(elements, mu, t_0, t)
+
+## CONSTELLATION TO ECEF
+
+
+
+## TARGET LIST INPUT AND TO ECEF
+
+def read_targets():  # D
+    lat_t, lon_t, weight = np.loadtxt("constellation_targets.csv", delimiter=',', usecols=(1, 2), unpack=True)
+
+    # lon_t = lon_t + 180
+
+    lat_t = np.radians(lat_t)
+    lon_t = np.radians(lon_t)
+
+    return lon_t, lat_t, weight
 
