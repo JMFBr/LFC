@@ -149,6 +149,40 @@ def solidAngle(h0, SW):
     return alpha
 
 
+def read_targets():
+    """Choose a season to get the targets
+        Summer for now
+    """
+
+    target_m = pd.read_csv("summer.csv")
+    # target_m = np.loadtxt("summer.csv", delimiter=",", dtype=str)  # Target matrix: Lat - Lon - Weight
+
+    target_m = target_m.to_numpy()  # Target matrix: Lat - Lon - Weight
+
+    target_m[:, 0] = np.radians(target_m[:, 0])  # Latitude to radians
+    target_m[:, 1] = np.radians(target_m[:, 1])  # Longitude to radians
+
+    weight = target_m[:, 2]
+
+    return target_m, weight
+
+
+def latlon2car(target_m):
+    """ Transform coordinates from Lat-Lon to ECEF:
+        Lat = target_m[:, 0]
+        Lon = target_m[:, 1]
+        Weight = target_m[:, 2]
+    """
+    x = RE * np.cos(target_m[:, 0]) * np.cos(target_m[:, 1])
+    y = RE * np.cos(target_m[:, 0]) * np.sin(target_m[:, 1])
+    z = RE * np.sin(target_m[:, 0])
+
+    target_m_r = np.array([x, y, z])
+
+    print('Targets position vectors calculated \n')
+    return target_m_r
+
+
 def ConstFam(n_TS):
     # -- 1. Loop all combination pairs n_0&n_s0
     # -- 2. Loop all possible n_c for each pair
@@ -191,8 +225,10 @@ def ConstFam(n_TS):
             # Transform constellation matrix: ECI to ECEF (Nts x 6)
 
             # Read target list
+            target_m_LatLon, weight = read_targets()  # Target matrix: Lat - Lon, Weight
 
             # Transform target matrix: LatLon to ECEF
+            target_m_ECEF = latlon2car(target_m_LatLon)  # Target matrix in ECEF: x - y -z
 
 
             ## COVERAGE AND TARGET ACCESS
