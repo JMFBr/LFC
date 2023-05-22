@@ -12,11 +12,11 @@ h = 580e3  # [m], Altitude
 
 a = RE + h  # [m], Semi-major axis
 e = 0
-inc = 72*np.pi/180  # [rad], Inclination
-om = 0*np.pi/180  # [rad], Argument of the perigee
+inc = 72 * np.pi/180  # [rad], Inclination
+om = 0 * np.pi/180  # [rad], Argument of the perigee
 
 twin_d = 2*60  # [s], Twin fixed separation distance WAC-NAC
-twin_d = twin_d*np.sqrt(mu/a**3)*(RE+h)  # [m]
+twin_d = twin_d * np.sqrt(mu / a ** 3) * (RE + h)  # [m]
 
 
 def MinDist(Omega, M):
@@ -149,6 +149,7 @@ def solidAngle(h0, SW):
 
     return alpha
 
+
 def kep2eci(const_m_OE, t, T):  # R modified for matrices
     """
     Converts Keplerian orbital elements to Earth-centered inertial coordinates.
@@ -238,7 +239,8 @@ def kep2eci(const_m_OE, t, T):  # R modified for matrices
 
 
 def read_targets():
-    """Choose a season to get the targets
+    """
+    Choose a season to get the targets
         Summer for now
     """
 
@@ -256,7 +258,8 @@ def read_targets():
 
 
 def latlon2car(target_m):
-    """ Transform coordinates from Lat-Lon to ECEF:
+    """
+    Transform coordinates from Lat-Lon to ECEF:
         Lat = target_m[:, 0]
         Lon = target_m[:, 1]
         Weight = target_m[:, 2]
