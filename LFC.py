@@ -18,6 +18,8 @@ om = 0 * np.pi/180  # [rad], Argument of the perigee
 twin_d = 2*60  # [s], Twin fixed separation distance WAC-NAC
 twin_d = twin_d * np.sqrt(mu / a ** 3) * (RE + h)  # [m]
 
+time_array_initial = (2023, 6, 26, 5, 43, 12)  # year, month, day, hour, minute, second (UTC)
+
 
 def MinDist(Omega, M):
     # -- Compute rho_min = The closest approach between the two satellites in two circular orbits
@@ -238,6 +240,64 @@ def kep2eci(const_m_OE, t, T):  # R modified for matrices
     return const_m_ECI
 
 
+def eci2ecef(time_array, const_m_ECI):
+    """
+    Converts ECI coordinates to Earth-centered, Earth-fixed coordinates.
+    Parameters:
+    -----------
+    time_array: Start date and time
+    const_m_ECI: Constellation matrix with ECI coordinates, array_like (N_TS x 6)
+        - ROWS: Position vector (x3), Velocity vector (x3).
+        - COLUMNS: Satellites in the constellation
+
+    Returns:
+    --------
+    const_m_ECEF : constellation matrix in ECEF coordinates, array_like (N_TS x 6)
+        - ROWS: x_ecef (x3), Earth-centered Earth fixed coordinates in meters: x, y, z (m).
+                v_ecef (x3), Earth-centered Earth fixed velocity coordinates: vx, vy, vz (m/s).
+        - COLUMNS: Satellites in the constellation
+    """
+
+    Y = time_array[0]  # year
+    Mo = time_array[1]  # month
+    D = time_array[2]  # day
+    ho = time_array[3]  # hour (in UTC time)
+    mi = time_array[4]  # minutes (in UTC time), adding the time since the start of the imaging
+    se = time_array[5]  # seconds (in UTC time)
+
+    jd = 1721013.5 + 367 * Y - int(7 / 4 * (Y + int((Mo + 9) / 12))) + int(275 * Mo / 9) + D + (
+                60 * ho + mi) / 1440 + se / 86400
+
+    # Calculate the number of days since J2000.0
+    days_since_J2000 = jd - 2451545.0
+
+    # Calculate the GMST in hours, minutes, and seconds
+    GMST_hours = 18.697374558 + 24.06570982441908 * days_since_J2000
+
+    GMST_hours %= 24  # Convert to the range [0, 24)
+    gmst = 2 * np.pi * GMST_hours / 24
+
+    R_ECEF2ECI = np.array([
+        [np.cos(gmst), -np.sin(gmst), 0],
+        [np.sin(gmst), np.cos(gmst), 0],
+        [0, 0, 1],
+    ])
+
+    # Earth rotation rate.
+    w = 7.292115146706979e-5
+
+    # Rotation
+    r_ecef = np.zeros((N_TS, 3))
+    v_ecef = np.zeros((N_TS, 3))
+    for k in range(N_TS):
+        r_ecef[k, :] = np.dot(np.transpose(R_ECEF2ECI), np.array(const_m_ECI[k, 0:3]))
+        v_ecef[k, :] = np.dot(np.transpose(R_ECEF2ECI), np.array(const_m_ECI[k, 3:])) - np.cross([0, 0, w], r_ecef[k, :])
+
+    const_m_ECEF = np.concatenate((r_ecef, v_ecef), axis=1)
+
+    return const_m_ECEF
+
+
 def read_targets():
     """
     Choose a season to get the targets
@@ -257,11 +317,11 @@ def read_targets():
     return target_m, weight
 
 
-def latlon2car(target_m):
+def latlon2ecef(target_m):
     """
     Transform coordinates from Lat-Lon to ECEF:
-        Lat = target_m[:, 0]
-        Lon = target_m[:, 1]
+        Lat, [rad] = target_m[:, 0]
+        Lon, [rad] = target_m[:, 1]
         Weight = target_m[:, 2]
     """
     x = RE * np.cos(target_m[:, 0]) * np.cos(target_m[:, 1])
@@ -269,6 +329,35 @@ def latlon2car(target_m):
     z = RE * np.sin(target_m[:, 0])
 
     target_m_r = np.array([x, y, z])
+
+    print('Targets position vectors calculated \n')
+    return target_m_r
+
+def latlon2ecef_elips(target_m):
+    """
+    Transform coordinates from Lat-Lon to ECEF:
+        Lat, [rad] = target_m[:, 0]
+        Lon, [rad] = target_m[:, 1]
+        Weight = target_m[:, 2]
+    """
+
+    alt = 0  # [m], Altitude of targets (assumed 0 for now)
+
+    # Define WGS84 ellipsoid parameters
+    a = 6378137.0  # semi-major axis (m)
+    b = 6356752.0  # semi-minor axis (m)
+
+    f = 1 - b / a  # flattening of Earth's ellipsoid
+    e2 = 1 - b ** 2 / a ** 2  # square of the first numerical eccentricity of Earth's ellipsoid
+
+    N = a / np.sqrt(1 - e2 * np.sin(target_m[:, 0]) ** 2)
+
+    x = (N + alt) * np.cos(target_m[:, 0]) * np.cos(target_m[:, 1])
+    y = (N + alt) * np.cos(target_m[:, 0]) * np.sin(target_m[:, 1])
+    z = ((1 - f) ** 2 * N + alt) * np.sin(target_m[:, 0])
+
+    target_m_r = np.array([x, y, z])
+    target_m_r = np.transpose(target_m_r)
 
     print('Targets position vectors calculated \n')
     return target_m_r
@@ -315,15 +404,14 @@ def ConstFam(n_TS):
             t = 0
             T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
             const_ECI = kep2eci(const_OE, t, T)
-
             # Transform constellation matrix: ECI to ECEF (Nts x 6)
+            const_ECEF = eci2ecef(time_array_initial, const_ECI)
 
             # Read target list
-            target_m_LatLon, weight = read_targets()  # Target matrix: Lat - Lon, Weight
-
+            target_m_LatLon, weight = read_targets()  # Target matrix Lat - Lon (N_targts, 2); Weight (N_targts, 1)
             # Transform target matrix: LatLon to ECEF
-            target_m_ECEF = latlon2car(target_m_LatLon)  # Target matrix in ECEF: x - y -z
-
+            # target_m_ECEF = latlon2ecef(target_m_LatLon)  # Target matrix in ECEF (N_targts, 3): x - y -z
+            target_m_ECEF = latlon2ecef_elips(target_m_LatLon)  # Target matrix in ECEF (N_targts, 3): x - y -z, Ellipsoid
 
             ## COVERAGE AND TARGET ACCESS
 

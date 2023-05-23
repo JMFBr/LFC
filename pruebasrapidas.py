@@ -55,15 +55,79 @@ om = 0 * np.pi / 180  # [rad], argument of the perigee
 (C, Omega, M, Omega_m, M_m) = LFC(N_0, N_s0, N_c)
 
 
+def read_targets():
+    """
+    Choose a season to get the targets
+        Summer for now
+    """
+
+    target_m = pd.read_csv("summer.csv")
+    # target_m = np.loadtxt("summer.csv", delimiter=",", dtype=str)  # Target matrix: Lat - Lon - Weight
+
+    target_m = target_m.to_numpy()  # Target matrix: Lat - Lon - Weight
+
+    target_m[:, 0] = np.radians(target_m[:, 0])  # Latitude to radians
+    target_m[:, 1] = np.radians(target_m[:, 1])  # Longitude to radians
+
+    weight = target_m[:, 2]
+
+    return target_m, weight
 
 
-## CONSTELLATION TO ECI:
+## LATLON TO ECEF
+def latlon2ecef_elips(target_m):
+    """
+    Transform coordinates from Lat-Lon to ECEF:
+        Lat, [rad] = target_m[:, 0]
+        Lon, [rad] = target_m[:, 1]
+        Weight = target_m[:, 2]
+    """
+
+    alt = 0  # [m], Altitude of targets (assumed 0 for now)
+
+    # Define WGS84 ellipsoid parameters
+    a = 6378137.0  # semi-major axis (m)
+    b = 6356752.0  # semi-minor axis (m)
+
+    f = 1 - b / a  # flattening of Earth's ellipsoid
+    e2 = 1 - b ** 2 / a ** 2  # square of the first numerical eccentricity of Earth's ellipsoid
+
+    N = a / np.sqrt(1 - e2 * np.sin(target_m[:, 0]) ** 2)
+
+    x = (N + alt) * np.cos(target_m[:, 0]) * np.cos(target_m[:, 1])
+    y = (N + alt) * np.cos(target_m[:, 0]) * np.sin(target_m[:, 1])
+    z = ((1 - f) ** 2 * N + alt) * np.sin(target_m[:, 0])
+
+    target_m_r = np.array([x, y, z])
+    target_m_r = np.transpose(target_m_r)
+
+    print('Targets position vectors calculated \n')
+    return target_m_r
+
+def latlon2ecef(target_m):
+    """
+    Transform coordinates from Lat-Lon to ECEF:
+        Lat, [rad] = target_m[:, 0]
+        Lon, [rad] = target_m[:, 1]
+        Weight = target_m[:, 2]
+    """
+    x = RE * np.cos(target_m[:, 0]) * np.cos(target_m[:, 1])
+    y = RE * np.cos(target_m[:, 0]) * np.sin(target_m[:, 1])
+    z = RE * np.sin(target_m[:, 0])
+
+    target_m_r = np.array([x, y, z])
+    target_m_r = np.transpose(target_m_r)
+
+    print('Targets position vectors calculated \n')
+    return target_m_r
 
 
 
 
-
-
+target_m_LatLon, weight = read_targets()  # Target matrix Lat - Lon (N_targets, 2); Weight (N_targets, 1)
+# Transform target matrix: LatLon to ECEF
+target_m_ECEF = latlon2ecef(target_m_LatLon)  # Target matrix in ECEF (N_targets, 3): x - y -z
+target_m_ECEF_elips = latlon2ecef_elips(target_m_LatLon)
 
 
 
