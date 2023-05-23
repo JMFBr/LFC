@@ -408,10 +408,10 @@ def ConstFam(n_TS):
             const_ECEF = eci2ecef(time_array_initial, const_ECI)
 
             # Read target list
-            target_m_LatLon, weight = read_targets()  # Target matrix Lat - Lon (N_targts, 2); Weight (N_targts, 1)
+            target_m_LatLon, weight = read_targets()  # Target matrix Lat - Lon (N_targets, 2); Weight (N_targets, 1)
             # Transform target matrix: LatLon to ECEF
-            # target_m_ECEF = latlon2ecef(target_m_LatLon)  # Target matrix in ECEF (N_targts, 3): x - y -z
-            target_m_ECEF = latlon2ecef_elips(target_m_LatLon)  # Target matrix in ECEF (N_targts, 3): x - y -z, Ellipsoid
+            # target_m_ECEF = latlon2ecef(target_m_LatLon)  # Target matrix in ECEF (N_targets, 3): x - y -z
+            target_m_ECEF = latlon2ecef_elips(target_m_LatLon)  # Target matrix in ECEF (N_targets, 3): x - y -z, Ellipsoid
 
             ## COVERAGE AND TARGET ACCESS
 
