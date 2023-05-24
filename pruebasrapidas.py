@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from numpy import linalg as LA
 
 
 def LFC(n_0, n_s0, n_c):
@@ -52,7 +53,155 @@ e = 0
 inc = 72 * np.pi / 180  # [rad], Inclination
 om = 0 * np.pi / 180  # [rad], argument of the perigee
 
+time_array_initial = (2023, 6, 26, 5, 43, 12)
+
 (C, Omega, M, Omega_m, M_m) = LFC(N_0, N_s0, N_c)
+
+
+def kep2eci(const_m_OE, t, T):  # R modified for matrices
+    """
+    Converts Keplerian orbital elements to Earth-centered inertial coordinates.
+    Parameters:
+    -----------
+    const_m_OE : constellation matrix with keplerian elements, array_like (N_TS x 6)
+        - ROWS: Orbital elements in the following order: semi-major axis (a) [m], eccentricity (e),
+        inclination (i) [rad], argument of peri-apsis (omega) [rad], right ascension of ascending node (Omega) [rad],
+        mean anomaly (M) [rad].
+        - COLUMNS: Satellites in the constellation
+
+    Returns:
+    --------
+    const_m_ECI : constellation matrix in ECI coordinates, array_like (N_TS x 6)
+        - ROWS: x_eci (x3), Earth-centered inertial coordinates in meters: x, y, z (m).
+                v_eci (x3), Earth-centered inertial velocity coordinates: vx, vy, vz (m/s).
+        - COLUMNS: Satellites in the constellation
+    """
+    # Define Keplerian orbital elements
+    a_v = const_m_OE[:, 0]
+    e_v = const_m_OE[:, 1]
+    i_v = const_m_OE[:, 2]
+    omega_v = const_m_OE[:, 3]
+    Omega_v = const_m_OE[:, 4]
+
+    # Initial position
+    M0_v = const_m_OE[:, 5]  # Initial mean anomaly vector
+    t0_v = M0_v*T/(2*np.pi)  # [s], Time from peri-apsis that corresponds to the initial true anomaly vector
+
+    # Current position
+    M_v = 2 * np.pi * (t0_v + t) / T  # Mean anomaly at current position
+
+    # Calculate eccentric anomaly
+    E = M_v
+    nu = np.zeros(N_TS)
+    for j in range(len(E)):  # Compute E using Newton's method for each satellite in teh constellation
+        while True:
+            E_new = E[j] + (M_v[j] - E[j] + e_v[j] * np.sin(E[j])) / (1 - e_v[j] * np.cos(E[j]))
+            if abs(E_new - E[j]) < 1e-8:
+                break
+            E[j] = E_new
+
+        if E[j] < 0:
+            E[j] += 2 * np.pi
+
+        # Calculate true anomaly corresponding to the current time t
+        nu[j] = 2 * np.arctan(np.sqrt((1 + e_v[j]) / (1 - e_v[j])) * np.tan(E[j] / 2))
+        if nu[j] < 0:
+            nu[j] += 2 * np.pi
+
+    # Calculate semi-latus rectum and mean motion
+    p = a_v * (1 - e_v ** 2)
+    # Calculate distance from Earth to satellite
+    r = p / (1 + e_v * np.cos(nu))
+
+    # Calculate position and velocity in peri-focal coordinates
+
+    x = np.array([r * np.cos(nu)])
+    y = np.array([r * np.sin(nu)])
+    z = np.zeros((N_TS, 1))
+    r_pqw = np.concatenate((x.T, y.T, z), axis=1)  # [m], Matrix: (Position vectors in peri-focal x N_TS)
+
+    vx = np.array([-np.sin(nu)]) * np.sqrt(mu / p)
+    vy = np.array([e + np.cos(nu)]) * np.sqrt(mu / p)
+    vz = np.zeros((N_TS, 1))
+    v_pqw = np.concatenate((vx.T, vy.T, vz), axis=1)  # [m/s], Matrix: (Velocity vectors in peri-focal x N_TS)
+
+    # Transformation matrix from peri-focal to geocentric equatorial coordinates. Dimensions: (3 x 3 x N_TS)
+    R_pqw_to_eci = np.array([
+        [np.cos(Omega_v) * np.cos(omega_v) - np.sin(Omega_v) * np.sin(omega_v) * np.cos(i_v),
+         -np.cos(Omega_v) * np.sin(omega_v) - np.sin(Omega_v) * np.cos(omega_v) * np.cos(i_v), np.sin(Omega_v) * np.sin(i_v)],
+        [np.sin(Omega_v) * np.cos(omega_v) + np.cos(Omega_v) * np.sin(omega_v) * np.cos(i_v),
+         -np.sin(Omega_v) * np.sin(omega_v) + np.cos(Omega_v) * np.cos(omega_v) * np.cos(i_v), -np.cos(Omega_v) * np.sin(i_v)],
+        [np.sin(i_v) * np.sin(omega_v), np.sin(i_v) * np.cos(omega_v), np.cos(i_v)]
+    ])
+
+    # Convert
+    r_eci = np.zeros((N_TS, 3))
+    v_eci = np.zeros((N_TS, 3))
+    for j in range(N_TS):
+        r_eci[j, :] = np.dot(R_pqw_to_eci[:, :, j], r_pqw[j, :])
+        v_eci[j, :] = np.dot(R_pqw_to_eci[:, :, j], v_pqw[j, :])
+
+    const_m_ECI = np.concatenate((r_eci, v_eci), axis=1)
+
+    return const_m_ECI
+
+
+def eci2ecef(time_array, const_m_ECI):
+    """
+    Converts ECI coordinates to Earth-centered, Earth-fixed coordinates.
+    Parameters:
+    -----------
+    time_array: Start date and time
+    const_m_ECI: Constellation matrix with ECI coordinates, array_like (N_TS x 6)
+        - ROWS: Position vector (x3), Velocity vector (x3).
+        - COLUMNS: Satellites in the constellation
+
+    Returns:
+    --------
+    const_m_ECEF : constellation matrix in ECEF coordinates, array_like (N_TS x 6)
+        - ROWS: x_ecef (x3), Earth-centered Earth fixed coordinates in meters: x, y, z (m).
+                v_ecef (x3), Earth-centered Earth fixed velocity coordinates: vx, vy, vz (m/s).
+        - COLUMNS: Satellites in the constellation
+    """
+
+    Y = time_array[0]  # year
+    Mo = time_array[1]  # month
+    D = time_array[2]  # day
+    ho = time_array[3]  # hour (in UTC time)
+    mi = time_array[4]  # minutes (in UTC time), adding the time since the start of the imaging
+    se = time_array[5]  # seconds (in UTC time)
+
+    jd = 1721013.5 + 367 * Y - int(7 / 4 * (Y + int((Mo + 9) / 12))) + int(275 * Mo / 9) + D + (
+                60 * ho + mi) / 1440 + se / 86400
+
+    # Calculate the number of days since J2000.0
+    days_since_J2000 = jd - 2451545.0
+
+    # Calculate the GMST in hours, minutes, and seconds
+    GMST_hours = 18.697374558 + 24.06570982441908 * days_since_J2000
+
+    GMST_hours %= 24  # Convert to the range [0, 24)
+    gmst = 2 * np.pi * GMST_hours / 24
+
+    R_ECEF2ECI = np.array([
+        [np.cos(gmst), -np.sin(gmst), 0],
+        [np.sin(gmst), np.cos(gmst), 0],
+        [0, 0, 1],
+    ])
+
+    # Earth rotation rate.
+    w = 7.292115146706979e-5
+
+    # Rotation
+    r_ecef = np.zeros((N_TS, 3))
+    v_ecef = np.zeros((N_TS, 3))
+    for k in range(N_TS):
+        r_ecef[k, :] = np.dot(np.transpose(R_ECEF2ECI), np.array(const_m_ECI[k, 0:3]))
+        v_ecef[k, :] = np.dot(np.transpose(R_ECEF2ECI), np.array(const_m_ECI[k, 3:])) - np.cross([0, 0, w], r_ecef[k, :])
+
+    const_m_ECEF = np.concatenate((r_ecef, v_ecef), axis=1)
+
+    return const_m_ECEF
 
 
 def read_targets():
@@ -104,31 +253,77 @@ def latlon2ecef_elips(target_m):
     print('Targets position vectors calculated \n')
     return target_m_r
 
-def latlon2ecef(target_m):
-    """
-    Transform coordinates from Lat-Lon to ECEF:
-        Lat, [rad] = target_m[:, 0]
-        Lon, [rad] = target_m[:, 1]
-        Weight = target_m[:, 2]
-    """
-    x = RE * np.cos(target_m[:, 0]) * np.cos(target_m[:, 1])
-    y = RE * np.cos(target_m[:, 0]) * np.sin(target_m[:, 1])
-    z = RE * np.sin(target_m[:, 0])
 
-    target_m_r = np.array([x, y, z])
-    target_m_r = np.transpose(target_m_r)
+# CONSTELLATION
+# Create constellation matrix with all satellites' orbital elements
+const_OE = np.ones((N_TS, 4))
+const_OE[:, 0] = a  # [m]
+const_OE[:, 1] = e
+const_OE[:, 2] = inc  # [rad]
+const_OE[:, 3] = om  # [rad]
+const_OE = np.c_[const_OE, Omega, M]  # Constellation matrix: (Nts x 6 OEs)
 
-    print('Targets position vectors calculated \n')
-    return target_m_r
+# Transform constellation matrix: OEs to ECI (Nts x 6)
+t = 0
+T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
+const_ECI = kep2eci(const_OE, t, T)
+# Transform constellation matrix: ECI to ECEF (Nts x 6)
+const_ECEF = eci2ecef(time_array_initial, const_ECI)
 
-
-
-
+# TARGETS
 target_m_LatLon, weight = read_targets()  # Target matrix Lat - Lon (N_targets, 2); Weight (N_targets, 1)
 # Transform target matrix: LatLon to ECEF
-target_m_ECEF = latlon2ecef(target_m_LatLon)  # Target matrix in ECEF (N_targets, 3): x - y -z
-target_m_ECEF_elips = latlon2ecef_elips(target_m_LatLon)
+target_ECEF = latlon2ecef_elips(target_m_LatLon)
 
+
+# COVERAGE
+def unit_v(v):  # D
+    u_v = v / LA.norm(v, axis=0)  # direction cosine
+
+    return u_v
+
+
+def dot_p(r_sat, r_t):  # D
+    if np.ndim(r_sat) == 4:
+        ang = np.einsum('mois,mt->tois', r_sat, r_t)
+    elif np.ndim(r_sat) == 3:
+        ang = np.einsum('mos,mt->tos', r_sat, r_t)
+    elif np.ndim(r_sat) == 2:
+        ang = np.einsum('ms,mt->ts', r_sat, r_t)
+
+    # ang = np.einsum('mois,mt->tois', r_sat, r_t)
+
+    return ang
+
+
+def projections(const_m_ECEF, target_m_ECEF):  # D modified (r, v, rt)
+    # Project Target coordinates into [ur, uh, uy] RF
+    r = const_m_ECEF[:, 0:3]  # (N_TS, 3)
+    v = const_m_ECEF[:, 3:]  # (N_TS, 3)
+
+    u_r = np.apply_along_axis(unit_v, 1, r)  # (N_TS, 3)
+    u_v = np.apply_along_axis(unit_v, 1, v)  # (N_TS, 3)
+    u_r_t = np.apply_along_axis(unit_v, 1, target_m_ECEF)  # (N_targets, 3)
+
+    print('New unit vectors calculated')
+
+     ## SEGUIR POR AQUI
+    u_h = np.cross(u_r, u_v, axisa=0, axisb=0, axisc=0)
+    u_h = u_h / LA.norm(u_h, axis=0)
+    u_y = np.cross(u_h, u_r, axisa=0, axisb=0, axisc=0)
+    u_y = u_y / LA.norm(u_y, axis=0)
+
+    print('New system reference calculated')
+
+    # Target projection on new system of reference
+
+    p1 = dot_p(u_r, u_r_t)
+    p2 = dot_p(u_y, u_r_t)
+    p3 = dot_p(u_h, u_r_t)
+
+    print('Targets projections calculated')
+
+    return p1, p2, p3
 
 
 

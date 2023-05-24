@@ -99,22 +99,22 @@ def projections(r, v, r_t):  # D
     u_v = unit_v(v)
     u_r_t = unit_v(r_t)
 
-    print('new unit vectors calculated')
+    print('New unit vectors calculated')
 
     u_h = np.cross(u_r, u_v, axisa=0, axisb=0, axisc=0)
     u_h = u_h / LA.norm(u_h, axis=0)
     u_y = np.cross(u_h, u_r, axisa=0, axisb=0, axisc=0)
     u_y = u_y / LA.norm(u_y, axis=0)
 
-    print('new system reference calculated')
+    print('New system reference calculated')
 
-    # target projection on new system of reference
+    # Target projection on new system of reference
 
     p1 = dot_p(u_r, u_r_t)
     p2 = dot_p(u_y, u_r_t)
     p3 = dot_p(u_h, u_r_t)
 
-    print('projections calculated')
+    print('Targets projections calculated')
 
     return p1, p2, p3
 

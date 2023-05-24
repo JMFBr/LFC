@@ -333,6 +333,7 @@ def latlon2ecef(target_m):
     print('Targets position vectors calculated \n')
     return target_m_r
 
+
 def latlon2ecef_elips(target_m):
     """
     Transform coordinates from Lat-Lon to ECEF:
@@ -364,10 +365,11 @@ def latlon2ecef_elips(target_m):
 
 
 def ConstFam(n_TS):
-    # -- 1. Loop all combination pairs n_0&n_s0
-    # -- 2. Loop all possible n_c for each pair
-    # For each constellation, inside the 2nd loop compute minimum distance constraint and coverage
-
+    """
+    -- 1. Loop all combination pairs n_0&n_s0
+    -- 2. Loop all possible n_c for each pair
+    For each constellation, inside the 2nd loop compute minimum distance constraint and coverage
+    """
     n_0, n_s0 = NumSats(n_TS)
 
     for j in range(len(n_0)):
@@ -408,10 +410,10 @@ def ConstFam(n_TS):
             const_ECEF = eci2ecef(time_array_initial, const_ECI)
 
             # Read target list
-            target_m_LatLon, weight = read_targets()  # Target matrix Lat - Lon (N_targets, 2); Weight (N_targets, 1)
+            target_LatLon, weight = read_targets()  # Target matrix Lat - Lon (N_targets, 2); Weight (N_targets, 1)
             # Transform target matrix: LatLon to ECEF
-            # target_m_ECEF = latlon2ecef(target_m_LatLon)  # Target matrix in ECEF (N_targets, 3): x - y -z
-            target_m_ECEF = latlon2ecef_elips(target_m_LatLon)  # Target matrix in ECEF (N_targets, 3): x - y -z, Ellipsoid
+            # target_m_ECEF = latlon2ecef(target_LatLon)  # Target matrix in ECEF (N_targets, 3): x - y -z
+            target_ECEF = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets, 3): x - y -z, Ellipsoid
 
             ## COVERAGE AND TARGET ACCESS
 
@@ -420,18 +422,5 @@ def ConstFam(n_TS):
             # Create coverage matrix: (Num targets x TimeStep)
 
             # Transform target matrix: ECEF to UrUhUy
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
