@@ -283,49 +283,83 @@ def unit_v(v):  # D
     return u_v
 
 
-def dot_p(r_sat, r_t):  # D
-    if np.ndim(r_sat) == 4:
-        ang = np.einsum('mois,mt->tois', r_sat, r_t)
-    elif np.ndim(r_sat) == 3:
-        ang = np.einsum('mos,mt->tos', r_sat, r_t)
-    elif np.ndim(r_sat) == 2:
-        ang = np.einsum('ms,mt->ts', r_sat, r_t)
-
-    # ang = np.einsum('mois,mt->tois', r_sat, r_t)
-
-    return ang
-
-
-def projections(const_m_ECEF, target_m_ECEF):  # D modified (r, v, rt)
-    # Project Target coordinates into [ur, uh, uy] RF
+def projections(const_m_ECEF, target_m_ECEF):  # D modified
+    """
+    Project Target coordinates into [ur, uh, uy] RF
+    """
     r = const_m_ECEF[:, 0:3]  # (N_TS, 3)
     v = const_m_ECEF[:, 3:]  # (N_TS, 3)
 
     u_r = np.apply_along_axis(unit_v, 1, r)  # (N_TS, 3)
     u_v = np.apply_along_axis(unit_v, 1, v)  # (N_TS, 3)
-    u_r_t = np.apply_along_axis(unit_v, 1, target_m_ECEF)  # (N_targets, 3)
+
+    u_r_t = np.apply_along_axis(unit_v, 1, target_m_ECEF)  # (N_targets, 3), unit vector in target direction ECEF
 
     print('New unit vectors calculated')
 
-     ## SEGUIR POR AQUI
-    u_h = np.cross(u_r, u_v, axisa=0, axisb=0, axisc=0)
-    u_h = u_h / LA.norm(u_h, axis=0)
-    u_y = np.cross(u_h, u_r, axisa=0, axisb=0, axisc=0)
-    u_y = u_y / LA.norm(u_y, axis=0)
+    u_h = np.cross(u_r, u_v, axisa=1, axisb=1, axisc=1) # (N_TS, 3)
+    u_y = np.cross(u_h, u_r, axisa=1, axisb=1, axisc=1) # (N_TS, 3)
 
     print('New system reference calculated')
 
     # Target projection on new system of reference
 
-    p1 = dot_p(u_r, u_r_t)
-    p2 = dot_p(u_y, u_r_t)
-    p3 = dot_p(u_h, u_r_t)
+    p1 = np.dot(u_r, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_r and target position vector in ECEF
+    p2 = np.dot(u_y, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_y and target position vector in ECEF
+    p3 = np.dot(u_h, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_h and target position vector in ECEF
 
     print('Targets projections calculated')
 
     return p1, p2, p3
 
 
+def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
+    dist_tol = 20  # [km] error tolerance in the cone sensor
+    alf_tol = np.arctan(dist_tol / RE)
+
+    p1, p2, p3 = projections(const_m_ECEF, target_m_ECEF)
+
+    # If the cosine is negative, means the satellite is in the other side of the Earth thus not visible
+    mask_p1 = p1 > 0  # Boolean, mask_p1(i)=True if p1(i)>0, p1=tr.ur must be >0 always
+
+    # along track
+    # psi = np.arctan2(p2, p1)
+    # filt_steps_al = np.absolute(psi) <= a_beta
+
+    filt_steps_al = np.absolute(p2) / p1 <= np.tan(a_beta)
+    filt_steps_al[~mask_p1] = False
+
+    print('Along filter ok', np.sum(filt_steps_al))
+
+    # across track
+    # phi = np.arctan2(p3, p1)
+    # filt_steps_ac = np.absolute(phi) <= a_alfa
+
+    filt_steps_ac = np.absolute(p3) / p1 <= np.tan(a_alfa - alf_tol)  # Boolean, True if tan(alpha_t)<=tan(alpha_s)
+    filt_steps_ac[~mask_p1] = False  # Values in mask_p1 that correspond to False are set to False in filt_steps_ac
+
+    print('Across filter ok ', np.sum(filt_steps_ac))
+
+    filt_steps = np.logical_and(filt_steps_al, filt_steps_ac)
+
+    print('Total filter ok', np.sum(filt_steps))
+
+    return filt_steps_ac
+
+
+def filt_pop(a, r, v, r_t, f_acr, f_alo):  # D modified
+    eta = a / RE
+    a_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))
+    a_alfa = a_alfa.T
+
+    a_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))
+    a_beta = a_beta.T
+
+    filt_steps = filt_steps_fun(r, v, r_t, a_alfa)  # Boolean, True is target is covered
+    cov_stepss = np.array(np.nonzero(filt_steps[:]))  # Return number of the Indices of filt_steps that are True aka
+    # the covered targets
+
+    return cov_stepss
 
 
 
