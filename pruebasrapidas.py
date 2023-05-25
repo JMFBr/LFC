@@ -283,6 +283,31 @@ def unit_v(v):  # D
     return u_v
 
 
+def solidAngle(h0, SW):
+    # Compute solid angle of the sensor given the swath width
+    # -- h0 = [m], Altitude used in the sensor information, 500km for Simera
+    # -- SW = [m], Sensor Swath Width, 120km at 500km for Simera
+
+    psi = SW / (2 * RE)
+
+    # Using Newtons method, solve: psi = -eps + acos(RE/(RE + h0)*cos(eps)) for elevation angle given psi, RE and h
+    err = 1e-8  # Error
+    eps = 1 * np.pi / 180  # [rad], Initial value
+    div = 1
+
+    while np.abs(div) > err:
+        f = -eps + np.arccos(RE / (RE + h0) * np.cos(eps)) - psi  # Equation to solve = 0
+        df = -1 + 1 / (np.sqrt(1 - (RE / (RE + h0) * np.cos(eps)) ** 2)) * RE / (RE + h0) * np.sin(
+            eps)  # Derivative of equation
+
+        div = f / df
+        eps = eps - div
+
+    alpha = np.pi / 2 - psi - eps  # [rad], solid angle
+
+    return alpha
+
+
 def projections(const_m_ECEF, target_m_ECEF):  # D modified
     """
     Project Target coordinates into [ur, uh, uy] RF
@@ -314,52 +339,49 @@ def projections(const_m_ECEF, target_m_ECEF):  # D modified
 
 
 def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
-    dist_tol = 20  # [km] error tolerance in the cone sensor
-    alf_tol = np.arctan(dist_tol / RE)
 
     p1, p2, p3 = projections(const_m_ECEF, target_m_ECEF)
 
     # If the cosine is negative, means the satellite is in the other side of the Earth thus not visible
     mask_p1 = p1 > 0  # Boolean, mask_p1(i)=True if p1(i)>0, p1=tr.ur must be >0 always
 
-    # along track
-    # psi = np.arctan2(p2, p1)
-    # filt_steps_al = np.absolute(psi) <= a_beta
+    # ACROSS
+    filt_steps_ac = np.absolute(p3) / p1 <= np.tan(a_alfa)  # Boolean, True if tan(alpha_t)<=tan(alpha_s)
+    filt_steps_ac[~mask_p1] = False  # Values in mask_p1 that correspond to False are set to False in filt_steps_ac
 
+    print('Across filter ok ', np.sum(filt_steps_ac))
+
+    # ALONG TRACK
     filt_steps_al = np.absolute(p2) / p1 <= np.tan(a_beta)
     filt_steps_al[~mask_p1] = False
 
     print('Along filter ok', np.sum(filt_steps_al))
 
-    # across track
-    # phi = np.arctan2(p3, p1)
-    # filt_steps_ac = np.absolute(phi) <= a_alfa
-
-    filt_steps_ac = np.absolute(p3) / p1 <= np.tan(a_alfa - alf_tol)  # Boolean, True if tan(alpha_t)<=tan(alpha_s)
-    filt_steps_ac[~mask_p1] = False  # Values in mask_p1 that correspond to False are set to False in filt_steps_ac
-
-    print('Across filter ok ', np.sum(filt_steps_ac))
-
-    filt_steps = np.logical_and(filt_steps_al, filt_steps_ac)
+    filt_steps = np.logical_or(filt_steps_al, filt_steps_ac)  # Account covered targets for along and across angles
 
     print('Total filter ok', np.sum(filt_steps))
 
     return filt_steps_ac
 
 
-def filt_pop(a, r, v, r_t, f_acr, f_alo):  # D modified
-    eta = a / RE
-    a_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))
-    a_alfa = a_alfa.T
+def filt_pop(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
 
-    a_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))
-    a_beta = a_beta.T
-
-    filt_steps = filt_steps_fun(r, v, r_t, a_alfa)  # Boolean, True is target is covered
+    filt_steps = filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta)  # Boolean, True is target is covered
     cov_stepss = np.array(np.nonzero(filt_steps[:]))  # Return number of the Indices of filt_steps that are True aka
     # the covered targets
 
     return cov_stepss
 
+
+eta = a / RE
+f_acr = solidAngle(500e3, 120e3)
+f_alo = solidAngle(500e3, 100e3)
+an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))
+an_alfa = an_alfa.T
+
+an_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))
+an_beta = an_beta.T
+
+cover = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
 
 
