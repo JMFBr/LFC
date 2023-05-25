@@ -366,9 +366,11 @@ def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
 
 def filt_pop(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
 
-    filt_steps = filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta)  # Boolean, True is target is covered
-    cov_stepss = np.array(np.nonzero(filt_steps[:]))  # Return number of the Indices of filt_steps that are True aka
-    # the covered targets
+    filt_steps = filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta)  # Boolean, True if target is covered
+
+    cov_stepss = np.array(np.nonzero(filt_steps[:]))
+    # Row 1: The row indices of True values in filt_steps
+    # Row 2: The column indices of True values in filt_steps
 
     return cov_stepss
 
