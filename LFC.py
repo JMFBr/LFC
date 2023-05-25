@@ -21,6 +21,7 @@ twin_d = twin_d * np.sqrt(mu / a ** 3) * (RE + h)  # [m]
 time_array_initial = (2023, 6, 26, 5, 43, 12)  # year, month, day, hour, minute, second (UTC)
 
 
+# CONSTRAINTS
 def MinDist(Omega, M):
     # -- Compute rho_min = The closest approach between the two satellites in two circular orbits
     # -- Distance bw satellites in different orbital planes
@@ -76,6 +77,7 @@ def MaxDist():
     return max_dist
 
 
+# CONSTELLATION
 def LFC(n_0, n_s0, n_c):
     # -- Computes 1 LFC given Nc, No and Nso
 
@@ -152,6 +154,7 @@ def solidAngle(h0, SW):
     return alpha
 
 
+# REFERENCE FRAME CHANGES & TARGETS
 def kep2eci(const_m_OE, t, T):  # R modified for matrices
     """
     Converts Keplerian orbital elements to Earth-centered inertial coordinates.
@@ -364,6 +367,80 @@ def latlon2ecef_elips(target_m):
     return target_m_r
 
 
+# COVERAGE
+def unit_v(v):  # D
+    u_v = v / LA.norm(v, axis=0)  # direction cosine
+
+    return u_v
+
+
+def projections(const_m_ECEF, target_m_ECEF):  # D modified
+    """
+    Project Target coordinates into [ur, uh, uy] RF
+    """
+    r = const_m_ECEF[:, 0:3]  # (N_TS, 3)
+    v = const_m_ECEF[:, 3:]  # (N_TS, 3)
+
+    u_r = np.apply_along_axis(unit_v, 1, r)  # (N_TS, 3)
+    u_v = np.apply_along_axis(unit_v, 1, v)  # (N_TS, 3)
+
+    u_r_t = np.apply_along_axis(unit_v, 1, target_m_ECEF)  # (N_targets, 3), unit vector in target direction ECEF
+
+    print('New unit vectors calculated')
+
+    u_h = np.cross(u_r, u_v, axisa=1, axisb=1, axisc=1) # (N_TS, 3)
+    u_y = np.cross(u_h, u_r, axisa=1, axisb=1, axisc=1) # (N_TS, 3)
+
+    print('New system reference calculated')
+
+    # Target projection on new system of reference
+
+    p1 = np.dot(u_r, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_r and target position vector in ECEF
+    p2 = np.dot(u_y, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_y and target position vector in ECEF
+    p3 = np.dot(u_h, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_h and target position vector in ECEF
+
+    print('Targets projections calculated')
+
+    return p1, p2, p3
+
+
+def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
+
+    p1, p2, p3 = projections(const_m_ECEF, target_m_ECEF)
+
+    # If the cosine is negative, means the satellite is in the other side of the Earth thus not visible
+    mask_p1 = p1 > 0  # Boolean, mask_p1(i)=True if p1(i)>0, p1=tr.ur must be >0 always
+
+    # ACROSS
+    filt_steps_ac = np.absolute(p3) / p1 <= np.tan(a_alfa)  # Boolean, True if tan(alpha_t)<=tan(alpha_s)
+    filt_steps_ac[~mask_p1] = False  # Values in mask_p1 that correspond to False are set to False in filt_steps_ac
+
+    print('Across filter ok ', np.sum(filt_steps_ac))
+
+    # ALONG TRACK
+    filt_steps_al = np.absolute(p2) / p1 <= np.tan(a_beta)
+    filt_steps_al[~mask_p1] = False
+
+    print('Along filter ok', np.sum(filt_steps_al))
+
+    filt_steps = np.logical_or(filt_steps_al, filt_steps_ac)  # Account covered targets for along and across angles
+
+    print('Total filter ok', np.sum(filt_steps))
+
+    return filt_steps_ac
+
+
+def filt_pop(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
+
+    filt_steps = filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta)  # Boolean, True if target is covered
+
+    cov_stepss = np.array(np.nonzero(filt_steps[:]))
+    # Row 1: The row indices of True values in filt_steps
+    # Row 2: The column indices of True values in filt_steps
+
+    return cov_stepss
+
+
 def ConstFam(n_TS):
     """
     -- 1. Loop all combination pairs n_0&n_s0
@@ -420,7 +497,17 @@ def ConstFam(n_TS):
             # Compute timestep
 
             # Create coverage matrix: (Num targets x TimeStep)
-
             # Transform target matrix: ECEF to UrUhUy
+
+            eta = a / RE
+            f_acr = solidAngle(500e3, 120e3)
+            f_alo = solidAngle(500e3, 100e3)
+            an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))
+            an_alfa = an_alfa.T
+
+            an_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))
+            an_beta = an_beta.T
+
+            cover = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
 
 
