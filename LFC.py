@@ -5,25 +5,34 @@ from numpy import linalg as LA
 ## PRUEBA
 N_TS = 44  # Total number of satellites
 
-# Data
+# Orbit Data
 mu = 3.986e14  # [m3/s2], Earth standard gravitational parameter
 RE = 6371e3  # [m], Earth Radius
 h = 580e3  # [m], Altitude
-
 a = RE + h  # [m], Semi-major axis
 e = 0
 inc = 72 * np.pi/180  # [rad], Inclination
 om = 0 * np.pi/180  # [rad], Argument of the perigee
 
+# Twin data
 twin_d = 2*60  # [s], Twin fixed separation distance WAC-NAC
 twin_d = twin_d * np.sqrt(mu / a ** 3) * (RE + h)  # [m]
-
-time_array_initial = (2023, 6, 26, 5, 43, 12)  # year, month, day, hour, minute, second (UTC)
 
 # Orbit propagation
 J2 = 0.00108263
 n0 = np.sqrt(mu / a**3)  # Unperturbed mean motion
 K = (RE / (a * (1 - e**2)))**2
+
+# Sensor info (Simera)
+h_s = 500e3  # [m], Altitude at which the sensor information is given
+d_ac = 120e3  # [m], Swath width
+d_al = 120e3  # [m], Along distance: used only for the simulation as the scanner is pushbroom
+
+# Times
+v_s = np.sqrt(mu/a)  # [m/s], Satellite velocity in a circular orbit
+Dt = a / RE * d_al / v_s  # [s], Timestep
+t_s = 24*3600  # Simulation duration
+time_array_initial = (2023, 6, 26, 5, 43, 12)  # year, month, day, hour, minute, second (UTC)
 
 
 # CONSTRAINTS
@@ -486,9 +495,10 @@ def ConstFam(n_TS):
         n_c = np.arange(1, n_0[j]) # Nc is in the range [1, N0-1]
 
         for k in range(len(n_c)):
+            # 1. CONSTELLATION
             C, Omega, M, Omega_m, M_m = LFC(n_0[j], n_s0[j], n_c[k])
-            # CONSTELLATION OBTAINED, HERE COMPUTE COVERAGE AND DISTANCE CONSTRAINTS
 
+            # 2. CONSTRAINTS
             # MIN Distance constraint:
             min_dist = MinDist(Omega, M)  # [m], Min distance inter-planes
             if min_dist < 2*twin_d:
@@ -504,6 +514,7 @@ def ConstFam(n_TS):
                 # Discard constellation if ISL cannot be connected (WAC1-NAC1--WAC2)
                 continue
 
+            # 3. CONSTELLATION MATRIX AND TRANSFORMATIONS
             # Create constellation matrix with all satellites' orbital elements
             const_OE = np.ones((N_TS, 4))
             const_OE[:, 0] = a  # [m]
@@ -519,6 +530,7 @@ def ConstFam(n_TS):
             # Transform constellation matrix: ECI to ECEF (Nts x 6)
             const_ECEF = eci2ecef(time_array_initial, const_ECI)
 
+            # 4. TARGET LIST
             # Read target list
             target_LatLon, weight = read_targets()  # Target matrix Lat - Lon (N_targets, 2); Weight (N_targets, 1)
             # Transform target matrix: LatLon to ECEF
@@ -533,8 +545,8 @@ def ConstFam(n_TS):
             # Transform target matrix: ECEF to UrUhUy
 
             eta = a / RE
-            f_acr = solidAngle(500e3, 120e3)
-            f_alo = solidAngle(500e3, 100e3)
+            f_acr = solidAngle(h_s, d_ac)  # [rad]
+            f_alo = solidAngle(h_s, d_al)  # [rad]
             an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))
             an_alfa = an_alfa.T
 
@@ -542,5 +554,7 @@ def ConstFam(n_TS):
             an_beta = an_beta.T
 
             cover = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
+
+
 
 

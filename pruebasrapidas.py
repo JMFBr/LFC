@@ -263,48 +263,14 @@ const_OE[:, 2] = inc  # [rad]
 const_OE[:, 3] = om  # [rad]
 const_OE = np.c_[const_OE, Omega, M]  # Constellation matrix: (Nts x 6 OEs)
 
-# Transform constellation matrix: OEs to ECI (Nts x 6)
-t = 0
-T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
-const_ECI = kep2eci(const_OE, t, T)
-# Transform constellation matrix: ECI to ECEF (Nts x 6)
-const_ECEF = eci2ecef(time_array_initial, const_ECI)
-
-# TARGETS
-target_m_LatLon, weight = read_targets()  # Target matrix Lat - Lon (N_targets, 2); Weight (N_targets, 1)
-# Transform target matrix: LatLon to ECEF
-target_ECEF = latlon2ecef_elips(target_m_LatLon)
-
-# ORBIT PROPAGATION
-J2 = 0.00108263
-n0 = np.sqrt(mu / a**3)  # Unperturbed mean motion
-K = (RE / (a * (1 - e**2)))**2
+d_a = 120e3
+v_s = np.sqrt(mu/a)  # Satellite velocity in a circular orbit
+Dt = a / RE * d_a/v_s
 
 
-def propagation(const_m_OE, Dt):
-    """
-    IN:
-    :param const_m_OE: Constellation matrix with OEs of previous timestep (a, e, i, om, Om, M)
-    :param Dt: Time step
 
-    OUT:
-    :return: const_m_OE_new: Constellation matrix with new OEs
-    """
 
-    om_dot = 3/2 * J2 * K * n0 * (2 - 5/2*np.sin(inc)**2)  # Argument of the perigee change rate due to J2
-    Om_dot = -3 / 2 * J2 * K * n0 * np.cos(inc)  # RAAN change rate due to J2
-    th_dot = n0 * (1 + 3/4 * J2 * K * (2 - 3*np.sin(inc)**2) * np.sqrt(1 - e**2))  # True anomaly change rate due to J2
 
-    # Change True anomaly to Eccentric anomaly to Mean anomaly:
-    D_th = th_dot * Dt  # Delta true anomaly
-    D_E = np.arcsin((np.sin(D_th) * np.sqrt(1 - e**2))/(1 + e*np.cos(D_th)))  # Delta eccentric anomaly
-    D_M = D_E - e * np.sin(D_E)  # Delta eman anomaly
 
-    const_m_OE_new = const_m_OE.copy()  # a, e, i: no change
-    const_m_OE_new[:, 3] += Dt * om_dot  # New arg of perigee
-    const_m_OE_new[:, 4] += Dt * Om_dot  # New RAAN
-    const_m_OE_new[:, 5] += D_M  # New mean anomaly
-
-    return const_m_OE_new
 
 
