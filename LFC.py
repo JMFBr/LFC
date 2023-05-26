@@ -20,6 +20,11 @@ twin_d = twin_d * np.sqrt(mu / a ** 3) * (RE + h)  # [m]
 
 time_array_initial = (2023, 6, 26, 5, 43, 12)  # year, month, day, hour, minute, second (UTC)
 
+# Orbit propagation
+J2 = 0.00108263
+n0 = np.sqrt(mu / a**3)  # Unperturbed mean motion
+K = (RE / (a * (1 - e**2)))**2
+
 
 # CONSTRAINTS
 def MinDist(Omega, M):
@@ -181,7 +186,7 @@ def kep2eci(const_m_OE, t, T):  # R modified for matrices
     Omega_v = const_m_OE[:, 4]
 
     # Initial position
-    M0_v = const_m_OE[:, 5]  # Initial mean anomaly vector
+    M0_v = const_m_OE[:, 5]  # Initial mean anomaly vector of values
     t0_v = M0_v*T/(2*np.pi)  # [s], Time from peri-apsis that corresponds to the initial true anomaly vector
 
     # Current position
@@ -439,6 +444,29 @@ def filt_pop(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
     # Row 2: The column indices of True values in filt_steps
 
     return cov_stepss
+
+
+# ORBIT PROPAGATION
+def propagation(const_m_OE, Dt):
+    """
+    IN:
+    :param const_m_OE: Constellation matrix with OEs of previous timestep (a, e, i, om, Om, M)
+    :param Dt: Time step
+
+    OUT:
+    :return: const_m_OE_new: Constellation matrix with new OEs
+    """
+
+    om_dot = 3/2 * J2 * K * n0 * (2 - 5/2*np.sin(inc)**2)  # Argument of the perigee change rate due to J2
+    Om_dot = -3 / 2 * J2 * K * n0 * np.cos(inc)  # RAAN change rate due to J2
+    th_dot = n0 * (1 + 3/4 * J2 * K * (2 - 3*np.sin(inc)**2) * np.sqrt(1 - e**2))  # True anomaly change rate due to J2
+
+    const_m_OE_new = const_m_OE
+    const_m_OE_new[:, 3] = const_m_OE[:, 3] + Dt * om_dot
+    const_m_OE_new[:, 4] = const_m_OE[:, 4] + Dt * Om_dot
+    const_m_OE_new[:, 5] = const_m_OE[:, 5] + Dt * th_dot
+
+    return const_m_OE_new
 
 
 def ConstFam(n_TS):
