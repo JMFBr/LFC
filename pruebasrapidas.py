@@ -295,10 +295,15 @@ def propagation(const_m_OE, Dt):
     Om_dot = -3 / 2 * J2 * K * n0 * np.cos(inc)  # RAAN change rate due to J2
     th_dot = n0 * (1 + 3/4 * J2 * K * (2 - 3*np.sin(inc)**2) * np.sqrt(1 - e**2))  # True anomaly change rate due to J2
 
-    const_m_OE_new = const_m_OE
-    const_m_OE_new[:, 3] = const_m_OE[:, 3] + Dt * om_dot
-    const_m_OE_new[:, 4] = const_m_OE[:, 4] + Dt * Om_dot
-    const_m_OE_new[:, 5] = const_m_OE[:, 5] + Dt * th_dot
+    # Change True anomaly to Eccentric anomaly to Mean anomaly:
+    D_th = th_dot * Dt  # Delta true anomaly
+    D_E = np.arcsin((np.sin(D_th) * np.sqrt(1 - e**2))/(1 + e*np.cos(D_th)))  # Delta eccentric anomaly
+    D_M = D_E - e * np.sin(D_E)  # Delta eman anomaly
+
+    const_m_OE_new = const_m_OE.copy()  # a, e, i: no change
+    const_m_OE_new[:, 3] += Dt * om_dot  # New arg of perigee
+    const_m_OE_new[:, 4] += Dt * Om_dot  # New RAAN
+    const_m_OE_new[:, 5] += D_M  # New mean anomaly
 
     return const_m_OE_new
 
