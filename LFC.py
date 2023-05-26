@@ -317,12 +317,21 @@ def eci2ecef(time_array, const_m_ECI):
 
 def read_targets():
     """
-    Choose a season to get the targets
-        Summer for now
+    Import target list depending on the season
     """
 
-    target_m = pd.read_csv("summer.csv")
-    # target_m = np.loadtxt("summer.csv", delimiter=",", dtype=str)  # Target matrix: Lat - Lon - Weight
+    if time_array_initial[1] <= 3:  # Jan to March included: winter
+        target_m = pd.read_csv("winter.csv")
+        print('Winter')
+    if 4 <= time_array_initial[1] <= 6:  # April to June: spring
+        target_m = pd.read_csv("spring.csv")
+        print('Spring')
+    if 7 <= time_array_initial[1] <= 9:  # July to Sep: summer
+        target_m = pd.read_csv("fall.csv")
+        print('Summer')
+    if time_array_initial[1] >= 10:  # Oct to Dec: fall
+        target_m = pd.read_csv("fall.csv")
+        print('Fall')
 
     target_m = target_m.to_numpy()  # Target matrix: Lat - Lon - Weight
 
