@@ -18,7 +18,7 @@ om = 0 * np.pi/180  # [rad], Argument of the perigee
 twin_d = 2*60  # [s], Twin fixed separation distance WAC-NAC
 twin_d = twin_d * np.sqrt(mu / a ** 3) * (RE + h)  # [m]
 
-# Orbit propagation
+# Orbit propagation data
 J2 = 0.00108263
 n0 = np.sqrt(mu / a**3)  # Unperturbed mean motion
 K = (RE / (a * (1 - e**2)))**2
@@ -465,11 +465,10 @@ def filt_pop(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
 
 
 # ORBIT PROPAGATION
-def propagation(const_m_OE, Dt):
+def propagation(const_m_OE):
     """
     IN:
     :param const_m_OE: Constellation matrix with OEs of previous timestep (a, e, i, om, Om, M)
-    :param Dt: Time step
 
     OUT:
     :return: const_m_OE_new: Constellation matrix with new OEs
@@ -480,7 +479,7 @@ def propagation(const_m_OE, Dt):
     th_dot = n0 * (1 + 3/4 * J2 * K * (2 - 3*np.sin(inc)**2) * np.sqrt(1 - e**2))  # True anomaly change rate due to J2
 
     # Change True anomaly to Eccentric anomaly to Mean anomaly:
-    D_th = th_dot * Dt  # Delta true anomaly
+    D_th = th_dot * Dt  # Delta true anomaly //  Dt: Time step, computed at the start of the code
     D_E = np.arcsin((np.sin(D_th) * np.sqrt(1 - e**2))/(1 + e*np.cos(D_th)))  # Delta eccentric anomaly
     D_M = D_E - e * np.sin(D_E)  # Delta eman anomaly
 
