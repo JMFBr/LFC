@@ -53,7 +53,6 @@ e = 0
 inc = 72 * np.pi / 180  # [rad], Inclination
 om = 0 * np.pi / 180  # [rad], argument of the perigee
 
-time_array_initial = (2023, 6, 26, 5, 43, 12)
 
 (C, Omega, M, Omega_m, M_m) = LFC(N_0, N_s0, N_c)
 
@@ -267,10 +266,44 @@ d_a = 120e3
 v_s = np.sqrt(mu/a)  # Satellite velocity in a circular orbit
 Dt = a / RE * d_a/v_s
 
+d_al = 120e3  # [m], Along distance: used only for the simulation as the scanner is pushbroom
+
+# Times
+v_s = np.sqrt(mu/a)  # [m/s], Satellite velocity in a circular orbit
+Dt = a / RE * d_al / v_s  # [s], Timestep
+
+time_array_initial = np.array([2023, 6, 26, 5, 43, 12])
 
 
 
 
+def addTime(time_array, Ddt):
+
+    # Y = time_array[0]  # year
+    # Mo = time_array[1]  # month
+    # D = time_array[2]  # day
+    # ho = time_array[3]  # hour (in UTC time)
+    # mi = time_array[4]  # minutes (in UTC time), adding the time since the start of the imaging
+    # se = time_array[5]  # seconds (in UTC time)
+
+    time_array[5] += Ddt
+
+    if time_array[5] > 60:
+        time_array[5] -= 60
+        time_array[4] += 1  # Add 1 minute
+
+    if time_array[4] > 60:
+        time_array[4] -= 60
+        time_array[3] += 1  # Add 1 hour
+
+    if time_array[3] > 24:
+        time_array[3] -= 24
+        time_array[2] += 1  # Add 1 day, Only until days
+
+    return ()
+
+
+addTime(time_array_initial, Dt)
 
 
 

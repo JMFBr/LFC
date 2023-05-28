@@ -31,8 +31,9 @@ d_al = 120e3  # [m], Along distance: used only for the simulation as the scanner
 # Times
 v_s = np.sqrt(mu/a)  # [m/s], Satellite velocity in a circular orbit
 Dt = a / RE * d_al / v_s  # [s], Timestep
-t_s = 24*3600  # Simulation duration
-time_array_initial = (2023, 6, 26, 5, 43, 12)  # year, month, day, hour, minute, second (UTC)
+t_s = 24*3600  # [s], Time span of the simulation duration
+time_array_initial = np.array([2023, 6, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
+t = 0#np.arange(1, t_s + 1, Dt)
 
 
 # CONSTRAINTS
@@ -82,7 +83,7 @@ def MaxDist():
     # alpha = Maximum angle at which 2 satellites see each other, determined by taking into account atmospheric
     # effects at h=100km
 
-    h_atm = 100e3  # [m], altitude at which we take into account atmospheric effects
+    h_atm = 100e3  # [m], Altitude at which we have FOV by taking into account atmospheric effects
 
     alpha = np.arccos((RE+h_atm)/(RE+h))  # [rad], 2 sates see each other if theta<=2*alpha
 
@@ -106,7 +107,7 @@ def LFC(n_0, n_s0, n_c):
     M = np.ones((N_TS, 1))
     k = 0
 
-    for i in range(1, n_0 + 1):  # Loop 1:N_0, si no especificas range inicial, el loop empieza en i=0
+    for i in range(1, n_0 + 1):
         for j in range(1, n_s0 + 1):
             B = 2 * np.pi * np.array([[i - 1], [j - 1]])
             C[i - 1, j - 1, :] = np.transpose(np.linalg.solve(L, B))
@@ -128,7 +129,10 @@ def LFC(n_0, n_s0, n_c):
 
 
 def NumSats(n_TS):
-    # -- Given Total number of satellites N_TS, compute all [N0 Ns0] possible pairs
+    """
+    :param n_TS: Given Total number of satellites N_TS
+    :return: n_s0, n0: Compute all [N0 Ns0] possible pairs
+    """
 
     # Create an array of integers from 1 to N_TS
     all_integers = np.arange(1, n_TS + 1)
@@ -279,7 +283,7 @@ def eci2ecef(time_array, const_m_ECI):
     Mo = time_array[1]  # month
     D = time_array[2]  # day
     ho = time_array[3]  # hour (in UTC time)
-    mi = time_array[4]  # minutes (in UTC time), adding the time since the start of the imaging
+    mi = time_array[4]  # minutes (in UTC time)
     se = time_array[5]  # seconds (in UTC time)
 
     jd = 1721013.5 + 367 * Y - int(7 / 4 * (Y + int((Mo + 9) / 12))) + int(275 * Mo / 9) + D + (
@@ -491,7 +495,33 @@ def propagation(const_m_OE):
     return const_m_OE_new
 
 
-def ConstFam(n_TS):
+def addTime(time_array, Ddt):
+
+    # Y = time_array[0]  # year
+    # Mo = time_array[1]  # month
+    # D = time_array[2]  # day
+    # ho = time_array[3]  # hour (in UTC time)
+    # mi = time_array[4]  # minutes (in UTC time), adding the time since the start of the imaging
+    # se = time_array[5]  # seconds (in UTC time)
+
+    time_array[5] += Ddt
+
+    if time_array[5] > 60:
+        time_array[5] -= 60
+        time_array[4] += 1  # Add 1 minute
+
+    if time_array[4] > 60:
+        time_array[4] -= 60
+        time_array[3] += 1  # Add 1 hour
+
+    if time_array[3] > 24:
+        time_array[3] -= 24
+        time_array[2] += 1  # Add 1 day, Only until days
+
+    return ()
+
+
+def ConstFam(n_TS, t):
     """
     -- 1. Loop all combination pairs n_0&n_s0
     -- 2. Loop all possible n_c for each pair
@@ -500,7 +530,7 @@ def ConstFam(n_TS):
     n_0, n_s0 = NumSats(n_TS)
 
     for j in range(len(n_0)):
-        n_c = np.arange(1, n_0[j]) # Nc is in the range [1, N0-1]
+        n_c = np.arange(1, n_0[j])  # Nc is in the range [1, N0-1]
 
         for k in range(len(n_c)):
             # 1. CONSTELLATION
@@ -508,61 +538,62 @@ def ConstFam(n_TS):
 
             # 2. CONSTRAINTS
             # MIN Distance constraint:
-            min_dist = MinDist(Omega, M)  # [m], Min distance inter-planes
+            min_dist = MinDist(Omega_m, M_m)  # [m], Min distance inter-planes
             if min_dist < 2*twin_d:
-                # Discard constellation if distance requirements are not met
+                # Discard constellation if minimum distance requirements are not met
                 continue
 
             # MAX Distance constraint:
             WAC_dist = 2*np.pi/n_s0[j]*(RE+h)  # [m], WAC-WAC satellites distance in 1 plane
             NAC_dist = twin_d  # [m], WAC-NAC distance in 1 plane
-            max_dist = MaxDist()  # [m], Max distance ISL constraint within 1 plane
 
             if WAC_dist > (NAC_dist + max_dist):
                 # Discard constellation if ISL cannot be connected (WAC1-NAC1--WAC2)
                 continue
 
-            # 3. CONSTELLATION MATRIX AND TRANSFORMATIONS
-            # Create constellation matrix with all satellites' orbital elements
-            const_OE = np.ones((N_TS, 4))
-            const_OE[:, 0] = a  # [m]
-            const_OE[:, 1] = e
-            const_OE[:, 2] = inc  # [rad]
-            const_OE[:, 3] = om  # [rad]
-            const_OE = np.c_[const_OE, Omega, M]  # Constellation matrix: (Nts x 6 OEs)
+            # TIMESTEP LOOP:
+            while t <= t_s:
 
-            # Transform constellation matrix: OEs to ECI (Nts x 6)
-            t = 0
-            T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
-            const_ECI = kep2eci(const_OE, t, T)
-            # Transform constellation matrix: ECI to ECEF (Nts x 6)
-            const_ECEF = eci2ecef(time_array_initial, const_ECI)
+                # 3. CONSTELLATION MATRIX AND TRANSFORMATIONS
+                # Create constellation matrix with all satellites' orbital elements
+                const_OE = np.ones((N_TS, 4))
+                const_OE[:, 0] = a  # [m]
+                const_OE[:, 1] = e
+                const_OE[:, 2] = inc  # [rad]
+                const_OE[:, 3] = om  # [rad]
+                const_OE = np.c_[const_OE, Omega, M]  # Constellation matrix: (Nts x 6 OEs)
 
-            # 4. TARGET LIST
-            # Read target list
-            target_LatLon, weight = read_targets()  # Target matrix Lat - Lon (N_targets, 2); Weight (N_targets, 1)
-            # Transform target matrix: LatLon to ECEF
-            # target_m_ECEF = latlon2ecef(target_LatLon)  # Target matrix in ECEF (N_targets, 3): x - y -z
-            target_ECEF = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets, 3): x - y -z, Ellipsoid
+                # Transform constellation matrix: OEs to ECI (Nts x 6)
+                T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
+                const_ECI = kep2eci(const_OE, t, T)
+                # Transform constellation matrix: ECI to ECEF (Nts x 6)
+                const_ECEF = eci2ecef(time_array_initial, const_ECI)
 
-            ## COVERAGE AND TARGET ACCESS
+                # 4. TARGET LIST
+                # Read target list:
+                target_LatLon, weight = read_targets()  # Target matrix: Lat-Lon (N_targets,2) // Weight (N_targets,1)
+                # Transform target matrix: LatLon to ECEF:
+                # target_m_ECEF = latlon2ecef(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z
+                target_ECEF = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
 
-            # Compute timestep
+                # 5.COVERAGE AND TARGET ACCESS
+                # Create coverage matrix: (Num targets x TimeStep)
+                # Transform target matrix: ECEF to UrUhUy
+                eta = a / RE
+                f_acr = solidAngle(h_s, d_ac)  # [rad]
+                f_alo = solidAngle(h_s, d_al)  # [rad]
 
-            # Create coverage matrix: (Num targets x TimeStep)
-            # Transform target matrix: ECEF to UrUhUy
+                an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))  # Across angle
+                an_alfa = an_alfa.T
+                an_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))  # Along angle
+                an_beta = an_beta.T
 
-            eta = a / RE
-            f_acr = solidAngle(h_s, d_ac)  # [rad]
-            f_alo = solidAngle(h_s, d_al)  # [rad]
-            an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))
-            an_alfa = an_alfa.T
+                cover = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
 
-            an_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))
-            an_beta = an_beta.T
-
-            cover = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
+                # 6.NEW TIME FOR NEXT LOOP
+                addTime(time_array_initial, Dt)  # New time array for new timestep
+                const_OE_new = propagation(const_OE)
+                t += Dt
 
 
-
-
+max_dist = MaxDist()  # [m], Max distance ISL constraint within 1 plane
