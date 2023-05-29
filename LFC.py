@@ -595,5 +595,7 @@ def ConstFam(n_TS, t):
                 const_OE_new = propagation(const_OE)
                 t += Dt
 
+    return ()
+
 
 max_dist = MaxDist()  # [m], Max distance ISL constraint within 1 plane
