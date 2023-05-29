@@ -33,7 +33,7 @@ v_s = np.sqrt(mu/a)  # [m/s], Satellite velocity in a circular orbit
 Dt = a / RE * d_al / v_s  # [s], Timestep
 t_s = 24*3600  # [s], Time span of the simulation duration
 time_array_initial = np.array([2023, 6, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
-t = 0#np.arange(1, t_s + 1, Dt)
+t = 0  #np.arange(1, t_s + 1, Dt)
 
 
 # CONSTRAINTS
@@ -521,81 +521,82 @@ def addTime(time_array, Ddt):
     return ()
 
 
-def ConstFam(n_TS, t):
-    """
-    -- 1. Loop all combination pairs n_0&n_s0
-    -- 2. Loop all possible n_c for each pair
-    For each constellation, inside the 2nd loop compute minimum distance constraint and coverage
-    """
-    n_0, n_s0 = NumSats(n_TS)
+# def ConstFam(n_TS, t):
+    #    -- 1. Loop all combination pairs n_0&n_s0
+    #    -- 2. Loop all possible n_c for each pair
+    # For each constellation, inside the 2nd loop compute minimum distance constraint and coverage
 
-    for j in range(len(n_0)):
-        n_c = np.arange(1, n_0[j])  # Nc is in the range [1, N0-1]
+n_0, n_s0 = NumSats(N_TS)
 
-        for k in range(len(n_c)):
-            # 1. CONSTELLATION
-            C, Omega, M, Omega_m, M_m = LFC(n_0[j], n_s0[j], n_c[k])
+for j in range(len(n_0)):
+    n_c = np.arange(1, n_0[j])  # Nc is in the range [1, N0-1]
 
-            # 2. CONSTRAINTS
-            # MIN Distance constraint:
-            min_dist = MinDist(Omega_m, M_m)  # [m], Min distance inter-planes
-            if min_dist < 2*twin_d:
-                # Discard constellation if minimum distance requirements are not met
-                continue
+    for k in range(len(n_c)):
+        # 1. CONSTELLATION
+        C, Omega, M, Omega_m, M_m = LFC(n_0[j], n_s0[j], n_c[k])
 
-            # MAX Distance constraint:
-            WAC_dist = 2*np.pi/n_s0[j]*(RE+h)  # [m], WAC-WAC satellites distance in 1 plane
-            NAC_dist = twin_d  # [m], WAC-NAC distance in 1 plane
+        # 2. CONSTRAINTS
+        # MIN Distance constraint:
+        min_dist = MinDist(Omega_m, M_m)  # [m], Min distance inter-planes
+        if min_dist < 2 * twin_d:
+            # Discard constellation if minimum distance requirements are not met
+            continue
 
-            if WAC_dist > (NAC_dist + max_dist):
-                # Discard constellation if ISL cannot be connected (WAC1-NAC1--WAC2)
-                continue
+        # MAX Distance constraint:
+        WAC_dist = 2 * np.pi / n_s0[j] * (RE + h)  # [m], WAC-WAC satellites distance in 1 plane
+        NAC_dist = twin_d  # [m], WAC-NAC distance in 1 plane
+        max_dist = MaxDist()  # [m], Max distance ISL constraint within 1 plane
 
-            # TIMESTEP LOOP:
-            while t <= t_s:
+        if WAC_dist > (NAC_dist + max_dist):
+            # Discard constellation if ISL cannot be connected (WAC1-NAC1--WAC2)
+            continue
 
-                # 3. CONSTELLATION MATRIX AND TRANSFORMATIONS
-                # Create constellation matrix with all satellites' orbital elements
-                const_OE = np.ones((N_TS, 4))
-                const_OE[:, 0] = a  # [m]
-                const_OE[:, 1] = e
-                const_OE[:, 2] = inc  # [rad]
-                const_OE[:, 3] = om  # [rad]
-                const_OE = np.c_[const_OE, Omega, M]  # Constellation matrix: (Nts x 6 OEs)
+        # TIMESTEP LOOP:
+        while t <= t_s:
+            # 3. CONSTELLATION MATRIX AND TRANSFORMATIONS
+            # Create constellation matrix with all satellites' orbital elements
+            const_OE = np.ones((N_TS, 4))
+            const_OE[:, 0] = a  # [m]
+            const_OE[:, 1] = e
+            const_OE[:, 2] = inc  # [rad]
+            const_OE[:, 3] = om  # [rad]
+            const_OE = np.c_[const_OE, Omega, M]  # Constellation matrix: (Nts x 6 OEs)
 
-                # Transform constellation matrix: OEs to ECI (Nts x 6)
-                T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
-                const_ECI = kep2eci(const_OE, t, T)
-                # Transform constellation matrix: ECI to ECEF (Nts x 6)
-                const_ECEF = eci2ecef(time_array_initial, const_ECI)
+            # Transform constellation matrix: OEs to ECI (Nts x 6)
+            T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
+            const_ECI = kep2eci(const_OE, t, T)
+            # Transform constellation matrix: ECI to ECEF (Nts x 6)
+            const_ECEF = eci2ecef(time_array_initial, const_ECI)
 
-                # 4. TARGET LIST
-                # Read target list:
-                target_LatLon, weight = read_targets()  # Target matrix: Lat-Lon (N_targets,2) // Weight (N_targets,1)
-                # Transform target matrix: LatLon to ECEF:
-                # target_m_ECEF = latlon2ecef(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z
-                target_ECEF = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
+            # 4. TARGET LIST
+            # Read target list:
+            target_LatLon, weight = read_targets()  # Target matrix: Lat-Lon (N_targets,2) // Weight (N_targets,1)
+            # Transform target matrix: LatLon to ECEF:
+            # target_m_ECEF = latlon2ecef(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z
+            target_ECEF = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
 
-                # 5.COVERAGE AND TARGET ACCESS
-                # Create coverage matrix: (Num targets x TimeStep)
-                # Transform target matrix: ECEF to UrUhUy
-                eta = a / RE
-                f_acr = solidAngle(h_s, d_ac)  # [rad]
-                f_alo = solidAngle(h_s, d_al)  # [rad]
+            # 5.COVERAGE AND TARGET ACCESS
+            # Create coverage matrix: (Num targets x TimeStep)
+            # Transform target matrix: ECEF to UrUhUy
+            eta = a / RE
+            f_acr = solidAngle(h_s, d_ac)  # [rad]
+            f_alo = solidAngle(h_s, d_al)  # [rad]
 
-                an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))  # Across angle
-                an_alfa = an_alfa.T
-                an_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))  # Along angle
-                an_beta = an_beta.T
+            an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))  # Across angle
+            an_alfa = an_alfa.T
+            an_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))  # Along angle
+            an_beta = an_beta.T
 
-                cover = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
+            # cover = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
+            cover = filt_pop(const_ECEF, target_ECEF, an_alfa, an_beta)
 
-                # 6.NEW TIME FOR NEXT LOOP
-                addTime(time_array_initial, Dt)  # New time array for new timestep
-                const_OE_new = propagation(const_OE)
-                t += Dt
+            # 6.NEW TIME FOR NEXT LOOP
+            addTime(time_array_initial, Dt)  # New time array for new timestep
+            const_OE_new = propagation(const_OE)
+            t += Dt
 
-    return ()
+    # return cover
 
 
-max_dist = MaxDist()  # [m], Max distance ISL constraint within 1 plane
+
+# cov = ConstFam(N_TS, t)
