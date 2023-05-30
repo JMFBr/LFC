@@ -33,7 +33,6 @@ v_s = np.sqrt(mu/a)  # [m/s], Satellite velocity in a circular orbit
 Dt = a / RE * d_al / v_s  # [s], Timestep
 t_s = 24*3600  # [s], Time span of the simulation duration
 time_array_initial = np.array([2023, 6, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
-t = 0  #np.arange(1, t_s + 1, Dt)
 
 
 # CONSTRAINTS
@@ -62,7 +61,7 @@ def MinDist(Omega_in, M_in):
                 DF / 2)  # [rad]
 
     d_min = rho_min * (RE + h)  # [m]
-    d_min_km = d_min / 1000
+    # d_min_km = d_min / 1000
 
     # Find the minimum distance among all the satellite pairs (Different to 0)
     non_zero_abs_vals = np.abs(d_min[d_min != 0])
@@ -87,9 +86,9 @@ def MaxDist():
 
     alpha = np.arccos((RE+h_atm)/(RE+h))  # [rad], 2 sates see each other if theta<=2*alpha
 
-    max_dist = 2*alpha*(RE+h)
+    max_dist_f = 2*alpha*(RE+h)
 
-    return max_dist
+    return max_dist_f
 
 
 # CONSTELLATION
@@ -144,7 +143,12 @@ def NumSats(n_TS):
 
     n_s0 = n_TS/n_0  # Number of sats/plane, dim(1x#multiples)
 
-    return n_s0, n_0
+    num_fam_const = int(np.sum(n_s0)-n_s0.shape[0])  # Number of constellations in the family
+
+    print('Number of pairs: ', n_s0.shape[0])
+    print('Number of constellations: ', num_fam_const)
+
+    return n_s0, n_0, num_fam_const
 
 
 def solidAngle(h0, SW):
@@ -326,16 +330,16 @@ def read_targets(time_array):
 
     if time_array[1] <= 3:  # Jan to March included: winter
         target_m = pd.read_csv("winter.csv")
-        print('Winter')
+        # print('Winter')
     if 4 <= time_array[1] <= 6:  # April to June: spring
         target_m = pd.read_csv("spring.csv")
-        print('Spring')
+        # print('Spring')
     if 7 <= time_array[1] <= 9:  # July to Sep: summer
         target_m = pd.read_csv("fall.csv")
-        print('Summer')
+        # print('Summer')
     if time_array[1] >= 10:  # Oct to Dec: fall
         target_m = pd.read_csv("fall.csv")
-        print('Fall')
+        # print('Fall')
 
     target_m = target_m.to_numpy()  # Target matrix: Lat - Lon - Weight
 
@@ -360,7 +364,6 @@ def latlon2ecef(target_m):
 
     target_m_r = np.array([x, y, z])
 
-    print('Targets position vectors calculated \n')
     return target_m_r
 
 
@@ -390,7 +393,6 @@ def latlon2ecef_elips(target_m):
     target_m_r = np.array([x, y, z])
     target_m_r = np.transpose(target_m_r)
 
-    print('Targets position vectors calculated \n')
     return target_m_r
 
 
@@ -413,20 +415,14 @@ def projections(const_m_ECEF, target_m_ECEF):  # D modified
 
     u_r_t = np.apply_along_axis(unit_v, 1, target_m_ECEF)  # (N_targets, 3), unit vector in target direction ECEF
 
-    print('New unit vectors calculated')
-
     u_h = np.cross(u_r, u_v, axisa=1, axisb=1, axisc=1) # (N_TS, 3)
     u_y = np.cross(u_h, u_r, axisa=1, axisb=1, axisc=1) # (N_TS, 3)
+    # New system reference calculated
 
-    print('New system reference calculated')
-
-    # Target projection on new system of reference
-
+    # Target projection on new system of reference:
     p1 = np.dot(u_r, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_r and target position vector in ECEF
     p2 = np.dot(u_y, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_y and target position vector in ECEF
     p3 = np.dot(u_h, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_h and target position vector in ECEF
-
-    print('Targets projections calculated')
 
     return p1, p2, p3
 
@@ -441,18 +437,15 @@ def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
     # ACROSS
     filt_steps_ac = np.absolute(p3) / p1 <= np.tan(a_alfa)  # Boolean, True if tan(alpha_t)<=tan(alpha_s)
     filt_steps_ac[~mask_p1] = False  # Values in mask_p1 that correspond to False are set to False in filt_steps_ac
-
-    print('Across filter ok ', np.sum(filt_steps_ac))
+    # print('Number of visible targets by Across filter: ', np.sum(filt_steps_ac))
 
     # ALONG TRACK
     filt_steps_al = np.absolute(p2) / p1 <= np.tan(a_beta)
     filt_steps_al[~mask_p1] = False
-
-    print('Along filter ok', np.sum(filt_steps_al))
+    # print('Number of visible targets by Along filter: ', np.sum(filt_steps_al))
 
     filt_steps = np.logical_or(filt_steps_al, filt_steps_ac)  # Account covered targets for along and across angles
-
-    print('Total filter ok', np.sum(filt_steps))
+    # print('Total num of visible targets at time-step: ', np.sum(filt_steps))
 
     return filt_steps
 
@@ -528,35 +521,41 @@ def addTime(time_array, Ddt):
     # For each constellation, inside the 2nd loop compute minimum distance constraint and coverage
 
 # All pairs N_0 & N_s0:
-N_0, N_s0 = NumSats(N_TS)
-cc = 0  # Count to keep track of the loops
+N_0, N_s0, num_const = NumSats(N_TS)
+cc = 0  # Count to keep track of the loops at end
+kk = 0  # Count to keep track of the loops at beginning
 
 # Initialize coverage matrix:
 m_t, w = read_targets(time_array_initial)
 N_targets = m_t.shape[0]
 N_Dt = np.arange(1, t_s + 1, Dt).shape[0]  # Number of time-steps
 Targets_Dt = np.zeros([N_targets, N_Dt], dtype=bool)  # Coverage matrix (N_targets x N_TimeSteps)
-tm = 0  # Index for coverage matrix
+
+cov_3d = np.zeros([N_targets, N_Dt, num_const], dtype=bool)  # 3Dcoverage matrix (N_targets xN_TimeSteps xConstellation)
 
 for j in range(len(N_0)):
     N_c = np.arange(1, N_0[j])  # Nc is in the range [1, N0-1]
 
     for k in range(len(N_c)):
+        print(N_0[j], N_s0[j], N_c[k])
         # Count
-        cc += 1
-        print(cc)
+        kk += 1
+        print('kk: ', kk)
 
         # 1. CONSTELLATION
         C, Omega, M, Omega_m, M_m = LFC(N_0[j], N_s0[j], N_c[k])
 
+        # Restart times for new constellation
+        t = 0  # np.arange(1, t_s + 1, Dt)
+        tm = 0  # Index for coverage matrix
+
         # 2. CONSTRAINTS
         # MIN Distance constraint:
-        # min_dist = MinDist(Omega_m, M_m)  # [m], Min distance inter-planes
-        # if min_dist < 2 * twin_d:
-        #     # Discard constellation if minimum distance requirements are not met
-        #     cc += 1
-        #     print('Min distance not fulfilled')
-        #     continue
+        min_dist = MinDist(Omega_m, M_m)  # [m], Min distance inter-planes
+        if min_dist > 2 * twin_d:
+            # Discard constellation if minimum distance requirements are not met
+            print('Min distance not fulfilled')
+            continue
 
         # MAX Distance constraint:
         WAC_dist = 2 * np.pi / N_s0[j] * (RE + h)  # [m], WAC-WAC satellites distance in 1 plane
@@ -577,10 +576,9 @@ for j in range(len(N_0)):
         const_OE[:, 3] = om  # [rad]
         const_OE = np.c_[const_OE, Omega, M]  # Constellation matrix: (Nts x 6 OEs)
 
-
-
         # TIMESTEP LOOP:
         while t <= t_s:
+            print(t)
 
             # Transform constellation matrix: OEs to ECI (Nts x 6)
             T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
@@ -613,10 +611,16 @@ for j in range(len(N_0)):
             tm += 1
 
             # 6.NEW TIME FOR NEXT LOOP
-            addTime(time_array_initial, Dt)  # New time array for new timestep
+            addTime(time_array_initial, Dt)  # Time array of new timestep
             const_OE_new = propagation(const_OE)
             t += Dt
-            print(t)
+
+        cov_3d[:, :, cc] = Targets_Dt
+
+        # Count
+        cc += 1
+        print('cc:', cc)
+
 
 
 
