@@ -10,7 +10,7 @@ mu = 3.986e14  # [m3/s2], Earth standard gravitational parameter
 RE = 6371e3  # [m], Earth Radius
 h = 580e3  # [m], Altitude
 a = RE + h  # [m], Semi-major axis
-e = 0
+e = 0  # Eccentricity
 inc = 72 * np.pi/180  # [rad], Inclination
 om = 0 * np.pi/180  # [rad], Argument of the perigee
 
