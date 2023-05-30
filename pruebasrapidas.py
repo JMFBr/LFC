@@ -53,6 +53,13 @@ e = 0
 inc = 72 * np.pi / 180  # [rad], Inclination
 om = 0 * np.pi / 180  # [rad], argument of the perigee
 
+# Sensor info (Simera)
+h_s = 500e3  # [m], Altitude at which the sensor information is given
+d_ac = 120e3  # [m], Swath width
+d_al = 120e3
+
+t_s = 24*3600
+
 
 (C, Omega, M, Omega_m, M_m) = LFC(N_0, N_s0, N_c)
 
@@ -203,23 +210,32 @@ def eci2ecef(time_array, const_m_ECI):
     return const_m_ECEF
 
 
-def read_targets():
+def read_targets(time_array):
     """
-    Choose a season to get the targets
-        Summer for now
+    Import target list depending on the season
     """
 
-    target_m = pd.read_csv("summer.csv")
-    # target_m = np.loadtxt("summer.csv", delimiter=",", dtype=str)  # Target matrix: Lat - Lon - Weight
+    if time_array[1] <= 3:  # Jan to March included: winter
+        target_m = pd.read_csv("winter.csv")
+        print('Winter')
+    if 4 <= time_array[1] <= 6:  # April to June: spring
+        target_m = pd.read_csv("spring.csv")
+        print('Spring')
+    if 7 <= time_array[1] <= 9:  # July to Sep: summer
+        target_m = pd.read_csv("fall.csv")
+        print('Summer')
+    if time_array[1] >= 10:  # Oct to Dec: fall
+        target_m = pd.read_csv("fall.csv")
+        print('Fall')
 
     target_m = target_m.to_numpy()  # Target matrix: Lat - Lon - Weight
 
     target_m[:, 0] = np.radians(target_m[:, 0])  # Latitude to radians
     target_m[:, 1] = np.radians(target_m[:, 1])  # Longitude to radians
 
-    weight = target_m[:, 2]
+    weights = target_m[:, 2]
 
-    return target_m, weight
+    return target_m, weights
 
 
 ## LATLON TO ECEF
@@ -271,39 +287,146 @@ d_al = 120e3  # [m], Along distance: used only for the simulation as the scanner
 # Times
 v_s = np.sqrt(mu/a)  # [m/s], Satellite velocity in a circular orbit
 Dt = a / RE * d_al / v_s  # [s], Timestep
+t = 0
 
 time_array_initial = np.array([2023, 6, 26, 5, 43, 12])
 
+T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
+const_ECI = kep2eci(const_OE, t, T)
+# Transform constellation matrix: ECI to ECEF (Nts x 6)
+const_ECEF = eci2ecef(time_array_initial, const_ECI)
+
+# 4. TARGET LIST
+# Read target list:
+target_LatLon, weight = read_targets(
+    time_array_initial)  # Target matrix: Lat-Lon (N_targets,2) // Weight: (N_targets,1)
+# Transform target matrix: LatLon to ECEF:
+# target_m_ECEF = latlon2ecef(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z
+target_ECEF = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
+
+
+def solidAngle(h0, SW):
+    # Compute solid angle of the sensor given the swath width
+    # -- h0 = [m], Altitude used in the sensor information, 500km for Simera
+    # -- SW = [m], Sensor Swath Width, 120km at 500km for Simera
+
+    psi = SW / (2 * RE)
+
+    # Using Newtons method, solve: psi = -eps + acos(RE/(RE + h0)*cos(eps)) for elevation angle given psi, RE and h
+    err = 1e-8  # Error
+    eps = 1 * np.pi / 180  # [rad], Initial value
+    div = 1
+
+    while np.abs(div) > err:
+        f = -eps + np.arccos(RE / (RE + h0) * np.cos(eps)) - psi  # Equation to solve = 0
+        df = -1 + 1 / (np.sqrt(1 - (RE / (RE + h0) * np.cos(eps)) ** 2)) * RE / (RE + h0) * np.sin(
+            eps)  # Derivative of equation
+
+        div = f / df
+        eps = eps - div
+
+    alpha = np.pi / 2 - psi - eps  # [rad], solid angle
+
+    return alpha
+
+
+def unit_v(v):  # D
+    u_v = v / LA.norm(v, axis=0)  # direction cosine
+
+    return u_v
+
+
+def projections(const_m_ECEF, target_m_ECEF):  # D modified
+    """
+    Project Target coordinates into [ur, uh, uy] RF
+    """
+    r = const_m_ECEF[:, 0:3]  # (N_TS, 3)
+    v = const_m_ECEF[:, 3:]  # (N_TS, 3)
+
+    u_r = np.apply_along_axis(unit_v, 1, r)  # (N_TS, 3)
+    u_v = np.apply_along_axis(unit_v, 1, v)  # (N_TS, 3)
+
+    u_r_t = np.apply_along_axis(unit_v, 1, target_m_ECEF)  # (N_targets, 3), unit vector in target direction ECEF
+
+    print('New unit vectors calculated')
+
+    u_h = np.cross(u_r, u_v, axisa=1, axisb=1, axisc=1) # (N_TS, 3)
+    u_y = np.cross(u_h, u_r, axisa=1, axisb=1, axisc=1) # (N_TS, 3)
+
+    print('New system reference calculated')
+
+    # Target projection on new system of reference
+
+    p1 = np.dot(u_r, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_r and target position vector in ECEF
+    p2 = np.dot(u_y, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_y and target position vector in ECEF
+    p3 = np.dot(u_h, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_h and target position vector in ECEF
+
+    print('Targets projections calculated')
+
+    return p1, p2, p3
+
+
+def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
+
+    p1, p2, p3 = projections(const_m_ECEF, target_m_ECEF)
+
+    # If the cosine is negative, means the satellite is in the other side of the Earth thus not visible
+    mask_p1 = p1 > 0  # Boolean, mask_p1(i)=True if p1(i)>0, p1=tr.ur must be >0 always
+
+    # ACROSS
+    filt_steps_ac = np.absolute(p3) / p1 <= np.tan(a_alfa)  # Boolean, True if tan(alpha_t)<=tan(alpha_s)
+    filt_steps_ac[~mask_p1] = False  # Values in mask_p1 that correspond to False are set to False in filt_steps_ac
+
+    print('Targets seen with Across filter: ', np.sum(filt_steps_ac))
+
+    # ALONG TRACK
+    filt_steps_al = np.absolute(p2) / p1 <= np.tan(a_beta)
+    filt_steps_al[~mask_p1] = False
+
+    print('Targets seen with Along filter: ', np.sum(filt_steps_al))
+
+    filt_steps = np.logical_or(filt_steps_al, filt_steps_ac)  # Account covered targets for along and across angles
+
+    print('Total targets seen: ', np.sum(filt_steps))
+
+    return filt_steps
 
 
 
-def addTime(time_array, Ddt):
+eta = a / RE
+f_acr = solidAngle(h_s, d_ac)  # [rad]
+f_alo = solidAngle(h_s, d_al)  # [rad]
+an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))  # Across angle
+an_alfa = an_alfa.T
+an_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))  # Along angle
+an_beta = an_beta.T
 
-    # Y = time_array[0]  # year
-    # Mo = time_array[1]  # month
-    # D = time_array[2]  # day
-    # ho = time_array[3]  # hour (in UTC time)
-    # mi = time_array[4]  # minutes (in UTC time), adding the time since the start of the imaging
-    # se = time_array[5]  # seconds (in UTC time)
+def filt_pop(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
 
-    time_array[5] += Ddt
+    filt_steps = filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta)  # Boolean, True if target is covered
 
-    if time_array[5] > 60:
-        time_array[5] -= 60
-        time_array[4] += 1  # Add 1 minute
+    cov_stepss = np.array(np.nonzero(filt_steps[:]))
+    # Row 1: The row indices of True values in filt_steps
+    # Row 2: The column indices of True values in filt_steps
 
-    if time_array[4] > 60:
-        time_array[4] -= 60
-        time_array[3] += 1  # Add 1 hour
-
-    if time_array[3] > 24:
-        time_array[3] -= 24
-        time_array[2] += 1  # Add 1 day, Only until days
-
-    return ()
+    return cov_stepss
 
 
-addTime(time_array_initial, Dt)
+cov = filt_pop(const_ECEF, target_ECEF, an_alfa, an_beta)
+Targets_Sats = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
 
+## NEW
 
+# Initialize coverage matrix:
+m_t, w = read_targets(time_array_initial)
+N_targets = m_t.shape[0]
+N_Dt = np.arange(1, t_s + 1, Dt).shape[0]  # Number of time-steps
+Targets_Dt = np.zeros([N_targets, N_Dt], dtype=bool)  # Coverage matrix (N_targets x N_TimeSteps)
+tm = 0  # Index for coverage matrix
 
+# Inside the time loop:
+# Create coverage matrix: (Num targets x TimeStep)
+# Target_Sat = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
+cov = filt_pop(const_ECEF, target_ECEF, an_alfa, an_beta)
+Targets_Dt[cov[1, :], tm] = True
+tm += 1

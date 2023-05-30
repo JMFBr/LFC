@@ -37,7 +37,7 @@ t = 0  #np.arange(1, t_s + 1, Dt)
 
 
 # CONSTRAINTS
-def MinDist(Omega, M):
+def MinDist(Omega_in, M_in):
     # -- Compute rho_min = The closest approach between the two satellites in two circular orbits
     # -- Distance bw satellites in different orbital planes
     # INPUTS: Matrices for M & Omega from LFC method
@@ -49,12 +49,12 @@ def MinDist(Omega, M):
     #  with all the other satellites staying on different orbital planes (bc regular distribution w/ LFC)
 
     # Initialize rho_min matrix
-    rho_min = np.zeros(M.shape)
+    rho_min = np.zeros(M_in.shape)
 
-    for m in range(M.shape[0]):
-        for n in range(M.shape[1]):
-            DM = M[m, n] - M[0, 0]  # [rad]. Take first satellite as reference
-            DO = Omega[m, n] - Omega[0, 0]
+    for m in range(M_in.shape[0]):
+        for n in range(M_in.shape[1]):
+            DM = M_in[m, n] - M_in[0, 0]  # [rad]. Take first satellite as reference
+            DO = Omega_in[m, n] - Omega_in[0, 0]
 
             DF = DM - 2 * np.arctan(-np.cos(inc) * np.tan(DO / 2))
 
@@ -319,21 +319,21 @@ def eci2ecef(time_array, const_m_ECI):
     return const_m_ECEF
 
 
-def read_targets():
+def read_targets(time_array):
     """
     Import target list depending on the season
     """
 
-    if time_array_initial[1] <= 3:  # Jan to March included: winter
+    if time_array[1] <= 3:  # Jan to March included: winter
         target_m = pd.read_csv("winter.csv")
         print('Winter')
-    if 4 <= time_array_initial[1] <= 6:  # April to June: spring
+    if 4 <= time_array[1] <= 6:  # April to June: spring
         target_m = pd.read_csv("spring.csv")
         print('Spring')
-    if 7 <= time_array_initial[1] <= 9:  # July to Sep: summer
+    if 7 <= time_array[1] <= 9:  # July to Sep: summer
         target_m = pd.read_csv("fall.csv")
         print('Summer')
-    if time_array_initial[1] >= 10:  # Oct to Dec: fall
+    if time_array[1] >= 10:  # Oct to Dec: fall
         target_m = pd.read_csv("fall.csv")
         print('Fall')
 
@@ -342,9 +342,9 @@ def read_targets():
     target_m[:, 0] = np.radians(target_m[:, 0])  # Latitude to radians
     target_m[:, 1] = np.radians(target_m[:, 1])  # Longitude to radians
 
-    weight = target_m[:, 2]
+    weights = target_m[:, 2]
 
-    return target_m, weight
+    return target_m, weights
 
 
 def latlon2ecef(target_m):
@@ -375,13 +375,13 @@ def latlon2ecef_elips(target_m):
     alt = 0  # [m], Altitude of targets (assumed 0 for now)
 
     # Define WGS84 ellipsoid parameters
-    a = 6378137.0  # semi-major axis (m)
+    a_E = 6378137.0  # semi-major axis (m)
     b = 6356752.0  # semi-minor axis (m)
 
-    f = 1 - b / a  # flattening of Earth's ellipsoid
-    e2 = 1 - b ** 2 / a ** 2  # square of the first numerical eccentricity of Earth's ellipsoid
+    f = 1 - b / a_E  # flattening of Earth's ellipsoid
+    e2 = 1 - b ** 2 / a_E ** 2  # square of the first numerical eccentricity of Earth's ellipsoid
 
-    N = a / np.sqrt(1 - e2 * np.sin(target_m[:, 0]) ** 2)
+    N = a_E / np.sqrt(1 - e2 * np.sin(target_m[:, 0]) ** 2)
 
     x = (N + alt) * np.cos(target_m[:, 0]) * np.cos(target_m[:, 1])
     y = (N + alt) * np.cos(target_m[:, 0]) * np.sin(target_m[:, 1])
@@ -454,14 +454,15 @@ def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
 
     print('Total filter ok', np.sum(filt_steps))
 
-    return filt_steps_ac
+    return filt_steps
 
 
 def filt_pop(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
 
-    filt_steps = filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta)  # Boolean, True if target is covered
+    filt_steps = filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta)  # Boolean matrix: (N_TS x N_targets)
+    # True if target is covered
 
-    cov_stepss = np.array(np.nonzero(filt_steps[:]))
+    cov_stepss = np.array(np.nonzero(filt_steps[:]))  # (2 x N_VisibleTargets)
     # Row 1: The row indices of True values in filt_steps
     # Row 2: The column indices of True values in filt_steps
 
@@ -526,41 +527,60 @@ def addTime(time_array, Ddt):
     #    -- 2. Loop all possible n_c for each pair
     # For each constellation, inside the 2nd loop compute minimum distance constraint and coverage
 
-n_0, n_s0 = NumSats(N_TS)
+# All pairs N_0 & N_s0:
+N_0, N_s0 = NumSats(N_TS)
+cc = 0  # Count to keep track of the loops
 
-for j in range(len(n_0)):
-    n_c = np.arange(1, n_0[j])  # Nc is in the range [1, N0-1]
+# Initialize coverage matrix:
+m_t, w = read_targets(time_array_initial)
+N_targets = m_t.shape[0]
+N_Dt = np.arange(1, t_s + 1, Dt).shape[0]  # Number of time-steps
+Targets_Dt = np.zeros([N_targets, N_Dt], dtype=bool)  # Coverage matrix (N_targets x N_TimeSteps)
+tm = 0  # Index for coverage matrix
 
-    for k in range(len(n_c)):
+for j in range(len(N_0)):
+    N_c = np.arange(1, N_0[j])  # Nc is in the range [1, N0-1]
+
+    for k in range(len(N_c)):
+        # Count
+        cc += 1
+        print(cc)
+
         # 1. CONSTELLATION
-        C, Omega, M, Omega_m, M_m = LFC(n_0[j], n_s0[j], n_c[k])
+        C, Omega, M, Omega_m, M_m = LFC(N_0[j], N_s0[j], N_c[k])
 
         # 2. CONSTRAINTS
         # MIN Distance constraint:
-        min_dist = MinDist(Omega_m, M_m)  # [m], Min distance inter-planes
-        if min_dist < 2 * twin_d:
-            # Discard constellation if minimum distance requirements are not met
-            continue
+        # min_dist = MinDist(Omega_m, M_m)  # [m], Min distance inter-planes
+        # if min_dist < 2 * twin_d:
+        #     # Discard constellation if minimum distance requirements are not met
+        #     cc += 1
+        #     print('Min distance not fulfilled')
+        #     continue
 
         # MAX Distance constraint:
-        WAC_dist = 2 * np.pi / n_s0[j] * (RE + h)  # [m], WAC-WAC satellites distance in 1 plane
+        WAC_dist = 2 * np.pi / N_s0[j] * (RE + h)  # [m], WAC-WAC satellites distance in 1 plane
         NAC_dist = twin_d  # [m], WAC-NAC distance in 1 plane
         max_dist = MaxDist()  # [m], Max distance ISL constraint within 1 plane
 
         if WAC_dist > (NAC_dist + max_dist):
             # Discard constellation if ISL cannot be connected (WAC1-NAC1--WAC2)
+            print('Max distance not fulfilled. No ISL connection.')
             continue
+
+        # 3. CONSTELLATION MATRIX AND TRANSFORMATIONS
+        # Create constellation matrix with all satellites' orbital elements
+        const_OE = np.ones((N_TS, 4))
+        const_OE[:, 0] = a  # [m]
+        const_OE[:, 1] = e
+        const_OE[:, 2] = inc  # [rad]
+        const_OE[:, 3] = om  # [rad]
+        const_OE = np.c_[const_OE, Omega, M]  # Constellation matrix: (Nts x 6 OEs)
+
+
 
         # TIMESTEP LOOP:
         while t <= t_s:
-            # 3. CONSTELLATION MATRIX AND TRANSFORMATIONS
-            # Create constellation matrix with all satellites' orbital elements
-            const_OE = np.ones((N_TS, 4))
-            const_OE[:, 0] = a  # [m]
-            const_OE[:, 1] = e
-            const_OE[:, 2] = inc  # [rad]
-            const_OE[:, 3] = om  # [rad]
-            const_OE = np.c_[const_OE, Omega, M]  # Constellation matrix: (Nts x 6 OEs)
 
             # Transform constellation matrix: OEs to ECI (Nts x 6)
             T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
@@ -570,13 +590,12 @@ for j in range(len(n_0)):
 
             # 4. TARGET LIST
             # Read target list:
-            target_LatLon, weight = read_targets()  # Target matrix: Lat-Lon (N_targets,2) // Weight (N_targets,1)
+            target_LatLon, weight = read_targets(time_array_initial)  # Target matrix: Lat-Lon (N_targets,2) // Weight: (N_targets,1)
             # Transform target matrix: LatLon to ECEF:
             # target_m_ECEF = latlon2ecef(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z
             target_ECEF = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
 
             # 5.COVERAGE AND TARGET ACCESS
-            # Create coverage matrix: (Num targets x TimeStep)
             # Transform target matrix: ECEF to UrUhUy
             eta = a / RE
             f_acr = solidAngle(h_s, d_ac)  # [rad]
@@ -587,16 +606,19 @@ for j in range(len(n_0)):
             an_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))  # Along angle
             an_beta = an_beta.T
 
-            # cover = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
-            cover = filt_pop(const_ECEF, target_ECEF, an_alfa, an_beta)
+            # Create coverage matrix: (Num targets x TimeStep)
+            # Target_Sat = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
+            cov = filt_pop(const_ECEF, target_ECEF, an_alfa, an_beta)
+            Targets_Dt[cov[1, :], tm] = True
+            tm += 1
 
             # 6.NEW TIME FOR NEXT LOOP
             addTime(time_array_initial, Dt)  # New time array for new timestep
             const_OE_new = propagation(const_OE)
             t += Dt
-
-    # return cover
-
+            print(t)
 
 
-# cov = ConstFam(N_TS, t)
+
+
+
