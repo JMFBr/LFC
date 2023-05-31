@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 from numpy import linalg as LA
+import matplotlib.pyplot as plt
+
 
 ## PRUEBA
 N_TS = 44  # Total number of satellites
@@ -115,16 +117,16 @@ def LFC(n_0, n_s0, n_c):
             M[k, :] = C[i - 1, j - 1, 1]  # Mean anomaly in vector form
             k = k + 1
 
-    Omega_m = C[:, :, 0]  # RAAN matrix
-    M_m = C[:, :, 1]  # Mean anomaly matrix
+    Omega_ma = C[:, :, 0]  # RAAN matrix
+    M_ma = C[:, :, 1]  # Mean anomaly matrix
 
     M_bool = np.logical_and(M >= 0, M <= 2 * np.pi)  # Check if values are between 0 and 2*pi
     M[~M_bool] += 2 * np.pi  # Set negative values of M to M+2*pi
 
-    M_bool = np.logical_and(M_m >= 0, M_m <= 2 * np.pi)  # Same for the matrix
-    M_m[~M_bool] += 2 * np.pi
+    M_bool = np.logical_and(M_ma >= 0, M_ma <= 2 * np.pi)  # Same for the matrix
+    M_ma[~M_bool] += 2 * np.pi
 
-    return C, Omega, M, Omega_m, M_m
+    return C, Omega, M, Omega_ma, M_ma
 
 
 def NumSats(n_TS):
@@ -515,10 +517,20 @@ def addTime(time_array, Ddt):
     return ()
 
 
-# def ConstFam(n_TS, t):
+# COMPUTATIONS:
     #    -- 1. Loop all combination pairs n_0&n_s0
     #    -- 2. Loop all possible n_c for each pair
     # For each constellation, inside the 2nd loop compute minimum distance constraint and coverage
+
+# Sensors coverage parameters:
+eta = a / RE
+f_acr = solidAngle(h_s, d_ac)  # [rad]
+f_alo = solidAngle(h_s, d_al)  # [rad]
+
+an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))  # Across angle
+an_alfa = an_alfa.T
+an_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))  # Along angle
+an_beta = an_beta.T
 
 # All pairs N_0 & N_s0:
 N_0, N_s0, num_const = NumSats(N_TS)
@@ -532,6 +544,7 @@ N_Dt = np.arange(1, t_s + 1, Dt).shape[0]  # Number of time-steps
 Targets_Dt = np.zeros([N_targets, N_Dt], dtype=bool)  # Coverage matrix (N_targets x N_TimeSteps)
 
 cov_3d = np.zeros([N_targets, N_Dt, num_const], dtype=bool)  # 3Dcoverage matrix (N_targets xN_TimeSteps xConstellation)
+DV_m = np.zeros([3, num_const])  # Initialize DVs matrix: (N_s0 N0 Nc x Constellation)
 
 for j in range(len(N_0)):
     N_c = np.arange(1, N_0[j])  # Nc is in the range [1, N0-1]
@@ -567,6 +580,9 @@ for j in range(len(N_0)):
             print('Max distance not fulfilled. No ISL connection.')
             continue
 
+        # Design Variables matrix --> N_s0, N_0, N_c of the constellations within the constraints:
+        DV_m[:, cc] = [N_s0[j], N_0[j], N_c[k]]
+
         # 3. CONSTELLATION MATRIX AND TRANSFORMATIONS
         # Create constellation matrix with all satellites' orbital elements
         const_OE = np.ones((N_TS, 4))
@@ -595,17 +611,10 @@ for j in range(len(N_0)):
 
             # 5.COVERAGE AND TARGET ACCESS
             # Transform target matrix: ECEF to UrUhUy
-            eta = a / RE
-            f_acr = solidAngle(h_s, d_ac)  # [rad]
-            f_alo = solidAngle(h_s, d_al)  # [rad]
-
-            an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))  # Across angle
-            an_alfa = an_alfa.T
-            an_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))  # Along angle
-            an_beta = an_beta.T
 
             # Create coverage matrix: (Num targets x TimeStep)
             # Target_Sat = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
+
             cov = filt_pop(const_ECEF, target_ECEF, an_alfa, an_beta)
             Targets_Dt[cov[1, :], tm] = True
             tm += 1
@@ -618,8 +627,86 @@ for j in range(len(N_0)):
         cov_3d[:, :, cc] = Targets_Dt
 
         # Count
-        cc += 1
+        cc += 1  # Final cc = Num of Constellations for which results were computed
         print('cc:', cc)
+
+
+# RESULTS:
+cov_3d_r = cov_3d[:, :, 0:cc]  # Coverage matrix for constellations within the constraints
+DV_m_r = DV_m[:, 0:cc]
+
+num_visits = np.sum(cov_3d_r, axis=1)  # Number of times each target is visited
+num_targets = np.sum(cov_3d_r, axis=0)  # Number of targets seen in each time-step
+num_targets_mean = np.mean(num_targets, axis=0)  # Average number of targets seen in each timestep
+
+# Figure 1:
+# Define dimensions
+Nx, Ny, Nz = 100, 300, 500
+X, Y, Z = np.meshgrid(np.arange(Nx), np.arange(Ny), -np.arange(Nz))
+
+# Create fake data
+data = (((X+100)**2 + (Y-20)**2 + 2*Z)/1000+1)
+
+kw = {
+    'vmin': data.min(),
+    'vmax': data.max(),
+    'levels': np.linspace(data.min(), data.max(), 10),
+}
+
+# Create a figure with 3D ax
+fig = plt.figure(figsize=(5, 4))
+ax = fig.add_subplot(111, projection='3d')
+
+# Plot contour surfaces
+_ = ax.contourf(
+    X[:, :, 0], Y[:, :, 0], data[:, :, 0],
+    zdir='z', offset=0, **kw
+)
+_ = ax.contourf(
+    X[0, :, :], data[0, :, :], Z[0, :, :],
+    zdir='y', offset=0, **kw
+)
+C = ax.contourf(
+    data[:, -1, :], Y[:, -1, :], Z[:, -1, :],
+    zdir='x', offset=X.max(), **kw
+)
+# --
+
+
+# Set limits of the plot from coord limits
+xmin, xmax = X.min(), X.max()
+ymin, ymax = Y.min(), Y.max()
+zmin, zmax = Z.min(), Z.max()
+ax.set(xlim=[xmin, xmax], ylim=[ymin, ymax], zlim=[zmin, zmax])
+
+# Plot edges
+edges_kw = dict(color='0.4', linewidth=1, zorder=1e3)
+ax.plot([xmax, xmax], [ymin, ymax], 0, **edges_kw)
+ax.plot([xmin, xmax], [ymin, ymin], 0, **edges_kw)
+ax.plot([xmax, xmax], [ymin, ymin], [zmin, zmax], **edges_kw)
+
+# Set labels and zticks
+ax.set(
+    xlabel='X [km]',
+    ylabel='Y [km]',
+    zlabel='Z [m]',
+    zticks=[0, -150, -300, -450],
+)
+
+# Set zoom and angle view
+ax.view_init(40, -30, 0)
+ax.set_box_aspect(None, zoom=0.9)
+
+# Colorbar
+fig.colorbar(C, ax=ax, fraction=0.02, pad=0.1, label='Name [units]')
+
+# Show Figure
+plt.show()
+
+
+
+
+
 
 
 
