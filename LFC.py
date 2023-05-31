@@ -35,6 +35,7 @@ v_s = np.sqrt(mu/a)  # [m/s], Satellite velocity in a circular orbit
 Dt = a / RE * d_al / v_s  # [s], Timestep
 t_s = 24*3600  # [s], Time span of the simulation duration
 time_array_initial = np.array([2023, 6, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
+T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
 
 
 # CONSTRAINTS
@@ -179,7 +180,7 @@ def solidAngle(h0, SW):
 
 
 # REFERENCE FRAME CHANGES & TARGETS
-def kep2eci(const_m_OE, t, T):  # R modified for matrices
+def kep2eci(const_m_OE):  # R modified for matrices
     """
     Converts Keplerian orbital elements to Earth-centered inertial coordinates.
     Parameters:
@@ -203,18 +204,12 @@ def kep2eci(const_m_OE, t, T):  # R modified for matrices
     i_v = const_m_OE[:, 2]
     omega_v = const_m_OE[:, 3]
     Omega_v = const_m_OE[:, 4]
-
-    # Initial position
-    M0_v = const_m_OE[:, 5]  # Initial mean anomaly vector of values
-    t0_v = M0_v*T/(2*np.pi)  # [s], Time from peri-apsis that corresponds to the initial true anomaly vector
-
-    # Current position
-    M_v = 2 * np.pi * (t0_v + t) / T  # Mean anomaly at current position
+    M_v = const_m_OE[:, 5]  # Mean anomaly vector of satellite values
 
     # Calculate eccentric anomaly
     E = M_v
     nu = np.zeros(N_TS)
-    for j in range(len(E)):  # Compute E using Newton's method for each satellite in teh constellation
+    for j in range(len(E)):  # Compute E using Newton's method for each satellite in the constellation
         while True:
             E_new = E[j] + (M_v[j] - E[j] + e_v[j] * np.sin(E[j])) / (1 - e_v[j] * np.cos(E[j]))
             if abs(E_new - E[j]) < 1e-8:
@@ -224,7 +219,7 @@ def kep2eci(const_m_OE, t, T):  # R modified for matrices
         if E[j] < 0:
             E[j] += 2 * np.pi
 
-        # Calculate true anomaly corresponding to the current time t
+        # Calculate true anomaly
         nu[j] = 2 * np.arctan(np.sqrt((1 + e_v[j]) / (1 - e_v[j])) * np.tan(E[j] / 2))
         if nu[j] < 0:
             nu[j] += 2 * np.pi
@@ -520,7 +515,7 @@ def addTime(time_array, Ddt):
 # COMPUTATIONS:
     #    -- 1. Loop all combination pairs n_0&n_s0
     #    -- 2. Loop all possible n_c for each pair
-    # For each constellation, inside the 2nd loop compute minimum distance constraint and coverage
+    # For each constellation, inside the 2nd loop compute distance constraints and coverage
 
 # Sensors coverage parameters:
 eta = a / RE
@@ -558,7 +553,7 @@ for j in range(len(N_0)):
         # 1. CONSTELLATION
         C, Omega, M, Omega_m, M_m = LFC(N_0[j], N_s0[j], N_c[k])
 
-        # Restart times for new constellation
+        # Restart the times for the new constellation
         t = 0  # np.arange(1, t_s + 1, Dt)
         tm = 0  # Index for coverage matrix
 
@@ -597,8 +592,7 @@ for j in range(len(N_0)):
             print(t)
 
             # Transform constellation matrix: OEs to ECI (Nts x 6)
-            T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
-            const_ECI = kep2eci(const_OE, t, T)
+            const_ECI = kep2eci(const_OE)
             # Transform constellation matrix: ECI to ECEF (Nts x 6)
             const_ECEF = eci2ecef(time_array_initial, const_ECI)
 
@@ -639,5 +633,29 @@ num_visits = np.sum(cov_3d_r, axis=1)  # Number of times each target is visited
 num_targets = np.sum(cov_3d_r, axis=0)  # Number of targets seen in each time-step
 num_targets_mean = np.mean(num_targets, axis=0)  # Average number of targets seen in each timestep
 
+
 # Figure 1:
-# https://matplotlib.org/stable/gallery/mplot3d/index.html
+# Extract the coordinates and values from the array
+x = DV_m_r[0, :]
+y = DV_m_r[1, :]
+z = DV_m_r[2, :]
+values = num_targets_mean.T
+
+# Plot the points in 3D space with colors based on values
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+scatter = ax.scatter(x, y, z, c=values, cmap='viridis')
+
+# Add a colorbar
+cbar = fig.colorbar(scatter)
+
+# Customize the plot appearance
+ax.set_xlabel('Ns0')
+ax.set_ylabel('N0')
+ax.set_zlabel('Nc')
+ax.set_title('Average seen targets per time step')
+
+plt.show()
+
+
+
