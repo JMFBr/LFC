@@ -600,7 +600,7 @@ for j in range(len(N_0)):
             # Read target list:
             target_LatLon, weight = read_targets(time_array_initial)  # Target matrix: Lat-Lon (N_targets,2) // Weight: (N_targets,1)
             # Transform target matrix: LatLon to ECEF:
-            # target_m_ECEF = latlon2ecef(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z
+            # target_ECEF = latlon2ecef(target_LatLon).T  # Target matrix in ECEF (N_targets,3): x-y-z
             target_ECEF = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
 
             # 5.COVERAGE AND TARGET ACCESS

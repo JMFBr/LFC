@@ -233,6 +233,22 @@ def read_targets(time_array):
 
 
 ## LATLON TO ECEF
+def latlon2ecef(target_m):
+    """
+    Transform coordinates from Lat-Lon to ECEF:
+        Lat, [rad] = target_m[:, 0]
+        Lon, [rad] = target_m[:, 1]
+        Weight = target_m[:, 2]
+    """
+    x = RE * np.cos(target_m[:, 0]) * np.cos(target_m[:, 1])
+    y = RE * np.cos(target_m[:, 0]) * np.sin(target_m[:, 1])
+    z = RE * np.sin(target_m[:, 0])
+
+    target_m_r = np.array([x, y, z])
+
+    return target_m_r
+
+
 def latlon2ecef_elips(target_m):
     """
     Transform coordinates from Lat-Lon to ECEF:
@@ -244,13 +260,13 @@ def latlon2ecef_elips(target_m):
     alt = 0  # [m], Altitude of targets (assumed 0 for now)
 
     # Define WGS84 ellipsoid parameters
-    a = 6378137.0  # semi-major axis (m)
+    a_E = 6378137.0  # semi-major axis (m)
     b = 6356752.0  # semi-minor axis (m)
 
-    f = 1 - b / a  # flattening of Earth's ellipsoid
-    e2 = 1 - b ** 2 / a ** 2  # square of the first numerical eccentricity of Earth's ellipsoid
+    f = 1 - b / a_E  # flattening of Earth's ellipsoid
+    e2 = 1 - b ** 2 / a_E ** 2  # square of the first numerical eccentricity of Earth's ellipsoid
 
-    N = a / np.sqrt(1 - e2 * np.sin(target_m[:, 0]) ** 2)
+    N = a_E / np.sqrt(1 - e2 * np.sin(target_m[:, 0]) ** 2)
 
     x = (N + alt) * np.cos(target_m[:, 0]) * np.cos(target_m[:, 1])
     y = (N + alt) * np.cos(target_m[:, 0]) * np.sin(target_m[:, 1])
@@ -259,7 +275,6 @@ def latlon2ecef_elips(target_m):
     target_m_r = np.array([x, y, z])
     target_m_r = np.transpose(target_m_r)
 
-    print('Targets position vectors calculated \n')
     return target_m_r
 
 
@@ -304,4 +319,7 @@ T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
 const_ECI = kep2eci(const_OE)
 const_ECEF = eci2ecef(time_array_initial, const_ECI)
 
+target_LatLon, weight = read_targets(time_array_initial)
+target_ECEF_elips = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
+target_ECEF = latlon2ecef(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z
 
