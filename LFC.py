@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 ## PRUEBA
-N_TS = 12  # Total number of satellites
+N_TS = 60  # Total number of satellites
 
 # Orbit Data
 mu = 3.986e14  # [m3/s2], Earth standard gravitational parameter
