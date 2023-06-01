@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 ## PRUEBA
-N_TS = 44  # Total number of satellites
+N_TS = 12  # Total number of satellites
 
 # Orbit Data
 mu = 3.986e14  # [m3/s2], Earth standard gravitational parameter
@@ -441,7 +441,7 @@ def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
     filt_steps_al[~mask_p1] = False
     # print('Number of visible targets by Along filter: ', np.sum(filt_steps_al))
 
-    filt_steps = np.logical_or(filt_steps_al, filt_steps_ac)  # Account covered targets for along and across angles
+    filt_steps = np.logical_and(filt_steps_al, filt_steps_ac)  # Account covered targets for along and across angles
     # print('Total num of visible targets at time-step: ', np.sum(filt_steps))
 
     return filt_steps
@@ -604,13 +604,9 @@ for j in range(len(N_0)):
             target_ECEF = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
 
             # 5.COVERAGE AND TARGET ACCESS
-            # Transform target matrix: ECEF to UrUhUy
-
-            # Create coverage matrix: (Num targets x TimeStep)
             # Target_Sat = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
-
             cov = filt_pop(const_ECEF, target_ECEF, an_alfa, an_beta)
-            Targets_Dt[cov[1, :], tm] = True
+            Targets_Dt[cov[1, :], tm] = True  # Coverage matrix: (Num targets x TimeStep)
             tm += 1
 
             # 6.NEW TIME FOR NEXT LOOP
@@ -618,7 +614,7 @@ for j in range(len(N_0)):
             const_OE_new = propagation(const_OE)
             t += Dt
 
-        cov_3d[:, :, cc] = Targets_Dt
+        cov_3d[:, :, cc] = Targets_Dt  # 3D coverage matrix (Num targets x TimeStep x Constellation)
 
         # Count
         cc += 1  # Final cc = Num of Constellations for which results were computed
