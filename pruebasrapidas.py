@@ -2,6 +2,36 @@ import numpy as np
 import pandas as pd
 from numpy import linalg as LA
 
+## DATA
+N_TS = 44  # Num satellites
+N_0 = 4  # Num planes
+N_s0 = 11  # Num satellites/planes
+N_c = 3  # Phasing parameter
+
+mu = 3.986e14  # [m3/s2], Earth standard gravitational parameter
+RE = 6371e3  # [m], Earth Radius
+h = 580e3  # [m], Altitude
+
+a = RE + h
+e = 0
+inc = 72 * np.pi / 180  # [rad], Inclination
+om = 0 * np.pi / 180  # [rad], argument of the perigee
+
+# Sensor info (Simera)
+h_s = 500e3  # [m], Altitude at which the sensor information is given
+d_ac = 120e3  # [m], Swath width
+d_al = 120e3
+
+t_s = 24 * 3600
+
+# Times
+v_s = np.sqrt(mu/a)  # [m/s], Satellite velocity in a circular orbit
+Dt = a / RE * d_al / v_s  # [s], Timestep
+
+J2 = 0.00108263
+n0 = np.sqrt(mu / a**3)  # Unperturbed mean motion
+K = (RE / (a * (1 - e**2)))**2
+
 
 def LFC(n_0, n_s0, n_c):
     # -- Computes 1 LFC given Nc, No and Nso
@@ -36,32 +66,6 @@ def LFC(n_0, n_s0, n_c):
     M_m[~M_bool] += 2 * np.pi
 
     return C, Omega, M, Omega_m, M_m
-
-
-## DATA
-N_TS = 44  # Num satellites
-N_0 = 4  # Num planes
-N_s0 = 11  # Num satellites/planes
-N_c = 4  # Phasing parameter
-
-mu = 3.986e14  # [m3/s2], Earth standard gravitational parameter
-RE = 6371e3  # [m], Earth Radius
-h = 580e3  # [m], Altitude
-
-a = RE + h
-e = 0
-inc = 72 * np.pi / 180  # [rad], Inclination
-om = 0 * np.pi / 180  # [rad], argument of the perigee
-
-# Sensor info (Simera)
-h_s = 500e3  # [m], Altitude at which the sensor information is given
-d_ac = 120e3  # [m], Swath width
-d_al = 120e3
-
-t_s = 24*3600
-
-
-(C, Omega, M, Omega_m, M_m) = LFC(N_0, N_s0, N_c)
 
 
 def kep2eci(const_m_OE):  # R modified for matrices
@@ -128,9 +132,11 @@ def kep2eci(const_m_OE):  # R modified for matrices
     # Transformation matrix from peri-focal to geocentric equatorial coordinates. Dimensions: (3 x 3 x N_TS)
     R_pqw_to_eci = np.array([
         [np.cos(Omega_v) * np.cos(omega_v) - np.sin(Omega_v) * np.sin(omega_v) * np.cos(i_v),
-         -np.cos(Omega_v) * np.sin(omega_v) - np.sin(Omega_v) * np.cos(omega_v) * np.cos(i_v), np.sin(Omega_v) * np.sin(i_v)],
+         -np.cos(Omega_v) * np.sin(omega_v) - np.sin(Omega_v) * np.cos(omega_v) * np.cos(i_v),
+         np.sin(Omega_v) * np.sin(i_v)],
         [np.sin(Omega_v) * np.cos(omega_v) + np.cos(Omega_v) * np.sin(omega_v) * np.cos(i_v),
-         -np.sin(Omega_v) * np.sin(omega_v) + np.cos(Omega_v) * np.cos(omega_v) * np.cos(i_v), -np.cos(Omega_v) * np.sin(i_v)],
+         -np.sin(Omega_v) * np.sin(omega_v) + np.cos(Omega_v) * np.cos(omega_v) * np.cos(i_v),
+         -np.cos(Omega_v) * np.sin(i_v)],
         [np.sin(i_v) * np.sin(omega_v), np.sin(i_v) * np.cos(omega_v), np.cos(i_v)]
     ])
 
@@ -172,7 +178,7 @@ def eci2ecef(time_array, const_m_ECI):
     se = time_array[5]  # seconds (in UTC time)
 
     jd = 1721013.5 + 367 * Y - int(7 / 4 * (Y + int((Mo + 9) / 12))) + int(275 * Mo / 9) + D + (
-                60 * ho + mi) / 1440 + se / 86400
+            60 * ho + mi) / 1440 + se / 86400
 
     # Calculate the number of days since J2000.0
     days_since_J2000 = jd - 2451545.0
@@ -197,7 +203,8 @@ def eci2ecef(time_array, const_m_ECI):
     v_ecef = np.zeros((N_TS, 3))
     for k in range(N_TS):
         r_ecef[k, :] = np.dot(np.transpose(R_ECEF2ECI), np.array(const_m_ECI[k, 0:3]))
-        v_ecef[k, :] = np.dot(np.transpose(R_ECEF2ECI), np.array(const_m_ECI[k, 3:])) - np.cross([0, 0, w], r_ecef[k, :])
+        v_ecef[k, :] = np.dot(np.transpose(R_ECEF2ECI), np.array(const_m_ECI[k, 3:])) - np.cross([0, 0, w],
+                                                                                                 r_ecef[k, :])
 
     const_m_ECEF = np.concatenate((r_ecef, v_ecef), axis=1)
 
@@ -303,6 +310,99 @@ def solidAngle(h0, SW):
     return alpha
 
 
+def unit_v(v):  # D
+    u_v = v / LA.norm(v, axis=0)  # direction cosine
+
+    return u_v
+
+
+def projections(const_m_ECEF, target_m_ECEF):  # D modified
+    """
+    Project Target coordinates into [ur, uh, uy] RF
+    """
+    r = const_m_ECEF[:, 0:3]  # (N_TS, 3)
+    v = const_m_ECEF[:, 3:]  # (N_TS, 3)
+
+    u_r = np.apply_along_axis(unit_v, 1, r)  # (N_TS, 3)
+    u_v = np.apply_along_axis(unit_v, 1, v)  # (N_TS, 3)
+
+    u_r_t = np.apply_along_axis(unit_v, 1, target_m_ECEF)  # (N_targets, 3), unit vector in target direction ECEF
+
+    u_h = np.cross(u_r, u_v, axisa=1, axisb=1, axisc=1)  # (N_TS, 3)
+    u_y = np.cross(u_h, u_r, axisa=1, axisb=1, axisc=1)  # (N_TS, 3)
+    # New system reference calculated
+
+    # Target projection on new system of reference:
+    p1 = np.dot(u_r, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_r and target position vector in ECEF
+    p2 = np.dot(u_y, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_y and target position vector in ECEF
+    p3 = np.dot(u_h, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_h and target position vector in ECEF
+
+    return p1, p2, p3
+
+
+def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
+
+    p1, p2, p3 = projections(const_m_ECEF, target_m_ECEF)
+
+    # If the cosine is negative, means the satellite is in the other side of the Earth, thus not visible
+    mask_p1 = p1 > 0  # Boolean, mask_p1(i)=True if p1(i)>0, p1=tr.ur must be >0 always
+
+    # ACROSS
+    filt_steps_ac = np.absolute(p3) / p1 <= np.tan(a_alfa)  # Boolean, True if tan(alpha_t)<=tan(alpha_s)
+    filt_steps_ac[~mask_p1] = False  # Values in mask_p1 that correspond to False are set to False in filt_steps_ac
+    # print('Number of visible targets by Across filter: ', np.sum(filt_steps_ac))
+
+    # ALONG TRACK
+    filt_steps_al = np.absolute(p2) / p1 <= np.tan(a_beta)
+    filt_steps_al[~mask_p1] = False
+    # print('Number of visible targets by Along filter: ', np.sum(filt_steps_al))
+
+    filt_steps = np.logical_and(filt_steps_al, filt_steps_ac)  # Account covered targets for along and across angles
+    # print('Total num of visible targets at time-step: ', np.sum(filt_steps))
+
+    return filt_steps
+
+
+def filt_pop(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
+
+    filt_steps = filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta)  # Boolean matrix: (N_TS x N_targets)
+    # True if target is covered
+
+    cov_stepss = np.array(np.nonzero(filt_steps[:]))  # (2 x N_VisibleTargets)
+    # Row 1: The row indices of True values in filt_steps
+    # Row 2: The column indices of True values in filt_steps
+
+    return cov_stepss
+
+
+def propagation(const_m_OE):
+    """
+    IN:
+    :param const_m_OE: Constellation matrix with OEs of previous timestep (a, e, i, om, Om, M)
+
+    OUT:
+    :return: const_m_OE_new: Constellation matrix with new OEs
+    """
+
+    om_dot = 3/2 * J2 * K * n0 * (2 - 5/2*np.sin(inc)**2)  # [rad/s], Argument of the perigee change rate due to J2
+    Om_dot = -3 / 2 * J2 * K * n0 * np.cos(inc)  # [rad/s],  RAAN change rate due to J2
+    th_dot = n0 * (1 + 3/4 * J2 * K * (2 - 3*np.sin(inc)**2) * np.sqrt(1 - e**2))  # True anomaly change rate due to J2
+
+    # Change True anomaly to Eccentric anomaly to Mean anomaly:
+    D_th = th_dot * Dt  # [rad], Delta true anomaly //  Dt: Time step, computed at the start of the code
+    D_E = np.arcsin((np.sin(D_th) * np.sqrt(1 - e**2))/(1 + e*np.cos(D_th)))  # [rad], Delta eccentric anomaly
+    D_M = D_E - e * np.sin(D_E)  # [rad], Delta mean anomaly
+
+    const_m_OE_new = const_m_OE.copy()  # a, e, i: no change
+    const_m_OE_new[:, 3] += Dt * om_dot  # New arg of perigee
+    const_m_OE_new[:, 4] += Dt * Om_dot  # New RAAN
+    const_m_OE_new[:, 5] += D_M  # New mean anomaly
+
+    return const_m_OE_new
+
+
+(C, Omega, M, Omega_m, M_m) = LFC(N_0, N_s0, N_c)
+
 # CONSTELLATION
 # Create constellation matrix with all satellites' orbital elements
 const_OE = np.ones((N_TS, 4))
@@ -312,14 +412,7 @@ const_OE[:, 2] = inc  # [rad]
 const_OE[:, 3] = om  # [rad]
 const_OE = np.c_[const_OE, Omega, M]  # Constellation matrix: (Nts x 6 OEs)
 
-time_array_initial = np.array([2023, 6, 26, 5, 43, 12])
-t = 0
+const_new = propagation(const_OE)
+T = 2 * np.pi * np.sqrt(a ** 3 / mu)
 
-T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
-const_ECI = kep2eci(const_OE)
-const_ECEF = eci2ecef(time_array_initial, const_ECI)
-
-target_LatLon, weight = read_targets(time_array_initial)
-target_ECEF_elips = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
-target_ECEF = latlon2ecef(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z
 
