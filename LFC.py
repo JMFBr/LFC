@@ -543,7 +543,7 @@ cov_3d = np.zeros([N_targets, N_Dt, num_const], dtype=bool)  # 3Dcoverage matrix
 DV_m = np.zeros([3, num_const])  # Initialize DVs matrix: (N_s0 N0 Nc x Constellation)
 
 for j in range(len(N_0)):
-    N_c = np.arange(1, N_0[j])  # Nc is in the range [1, N0-1]
+    N_c = np.arange(1, N_0[j]+1)  # Nc is in the range [1, N0]
 
     for k in range(len(N_c)):
         print(N_0[j], N_s0[j], N_c[k])
