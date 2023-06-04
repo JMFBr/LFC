@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import plotly.express as px
 
 ## PRUEBA
-N_TS = 44 # Total number of satellites
+N_TS = 44  # Total number of satellites
 
 # Orbit Data
 mu = 3.986e14  # [m3/s2], Earth standard gravitational parameter
@@ -34,7 +34,7 @@ d_al = 120e3  # [m], Along distance: used only for the simulation as the scanner
 v_s = np.sqrt(mu / a)  # [m/s], Satellite velocity in a circular orbit
 Dt = a / RE * d_al / v_s   # [s], Timestep
 t_s = 24 * 3600  # [s], Time span of the simulation duration
-time_array_initial = np.array([2023, 6, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
+time_array_initial = np.array([2023, 1, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
 T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
 
 
@@ -367,6 +367,21 @@ def latlon2ecef(target_m):
     return target_m_r
 
 
+def ecef2latlon(const_m_ecef):
+    """
+    Transform coordinates from Lat-Lon to ECEF:
+        x, [m] = const_m[:, 0]
+        y, [m] = const_m[:, 1]
+        z, [m] = const_m[:, 2]
+    """
+    lat = np.arcsin(const_m_ecef[:, 2]/RE)
+    lon = np.arcsin(const_m_ecef[:, 1] / (RE * np.cos(lat)))
+
+    target_m_ll = np.array([lat, lon])
+
+    return target_m_ll
+
+
 def latlon2ecef_elips(target_m):
     """
     Transform coordinates from Lat-Lon to ECEF:
@@ -428,6 +443,8 @@ def projections(const_m_ECEF, target_m_ECEF):  # D modified
 
 
 def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
+    dist_tol = 20  # [km] error tolerance in the cone sensor
+    alf_tol = np.arctan(dist_tol / RE)
 
     p1, p2, p3 = projections(const_m_ECEF, target_m_ECEF)
 
@@ -435,7 +452,7 @@ def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
     mask_p1 = p1 > 0  # Boolean, mask_p1(i)=True if p1(i)>0, p1=tr.ur must be >0 always
 
     # ACROSS
-    filt_steps_ac = np.absolute(p3) / p1 <= np.tan(a_alfa)  # Boolean, True if tan(alpha_t)<=tan(alpha_s)
+    filt_steps_ac = np.absolute(p3) / p1 <= np.tan(a_alfa - alf_tol)  # Boolean, True if tan(alpha_t)<=tan(alpha_s)
     filt_steps_ac[~mask_p1] = False  # Values in mask_p1 that correspond to False are set to False in filt_steps_ac
 
     # ALONG TRACK
@@ -521,7 +538,7 @@ def addTime(time_array, Ddt):
 
 # Sensors coverage parameters:
 eta = a / RE
-f_acr = solidAngle(h_s, d_ac) # [rad]
+f_acr = solidAngle(h_s, d_ac)  # [rad]
 f_alo = solidAngle(h_s, d_al)  # [rad]
 
 an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))  # Across angle
@@ -579,6 +596,8 @@ const_OE[:, 2] = inc  # [rad]
 const_OE[:, 3] = om  # [rad]
 const_OE = np.c_[const_OE, Omega, M]  # Constellation matrix: (Nts x 6 OEs)
 
+nadir_P_latlon = np.zeros((2, N_TS, N_Dt))  # Matrix of nadir coordinates at every timestep
+
 # TIMESTEP LOOP:
 while t <= t_s:
     print(t)
@@ -587,6 +606,12 @@ while t <= t_s:
     const_ECI = kep2eci(const_OE)
     # Transform constellation matrix: ECI to ECEF (Nts x 6)
     const_ECEF = eci2ecef(time_array_initial, const_ECI)
+
+    # 3.5. PLOT TRACKS
+    r_const = const_ECEF[:, 0:3]
+    ur = np.apply_along_axis(unit_v, 1, r_const)
+    nadir_P_ECEF = RE * ur
+    nadir_P_latlon[:, :, tm] = ecef2latlon(nadir_P_ECEF)  # Nadir point of every satellite
 
     # 4. TARGET LIST
     # Read target list:
@@ -618,7 +643,7 @@ num_visits = np.sum(cov_3d_r, axis=1)  # Number of times each target is visited
 num_targets = np.sum(cov_3d_r, axis=0)  # Number of targets seen in each time-step
 num_targets_mean = np.mean(num_targets, axis=0)  # Average number of targets seen in each timestep
 
-# Figure 1: 3D scatter, mean visits per timestep
+# FIGURE 1: 3D scatter, mean visits per timestep
 # Extract the coordinates and values from the array
 x = DV_m_r[0, :]
 y = DV_m_r[1, :]
@@ -641,17 +666,17 @@ ax.set_title('Average seen targets per time step')
 #plt.show(fig1)
 
 
-# Figure 2: Map
+# FIGURE 2: Map
 # Read the CSV file
-data = pd.read_csv('spring.csv')
+data = pd.read_csv('winter.csv')
 # data['Visits0'] = num_visits[:, 0].tolist()  # Add first constellation
 # data['Visits1'] = num_visits[:, 1].tolist()  # Add second constellation
 # data['Visits2'] = num_visits[:, 2].tolist()  # Add third constellation
 data['Visits3'] = num_visits[:, 0].tolist()  # Add forth constellation
 
 # #
-# fig = px.scatter_geo(data, lat='Lat', lon='Lon', color="Visits3")
-# fig.show()
+fig = px.scatter_geo(data, lat='Lat', lon='Lon', color="Visits3")
+fig.show()
 # #
 
 fig2 = plt.figure()
@@ -663,3 +688,28 @@ plt.xlabel('Lon')
 plt.ylabel('Lat ')
 plt.title('Number of visits')
 plt.show()
+
+
+# FIGURE 3: Ground tracks
+# Plot 4 satellites, one in each plane for the first 200 timesteps
+fig3 = plt.figure()
+plt.scatter(nadir_P_latlon[1, 0, 0:200], nadir_P_latlon[0, 0, 0:200], s=10)
+plt.scatter(nadir_P_latlon[1, 10, 0:200], nadir_P_latlon[0, 10, 0:200], s=10)
+plt.scatter(nadir_P_latlon[1, 21, 0:200], nadir_P_latlon[0, 21, 0:200], s=10)
+plt.scatter(nadir_P_latlon[1, 32, 0:200], nadir_P_latlon[0, 32, 0:200], s=10)
+# Set labels and title
+plt.xlabel('Lon')
+plt.ylabel('Lat ')
+plt.title('Ground Track')
+plt.show()
+
+# Plot all satellites,the first 200 timestep
+fig4 = plt.figure()
+plt.scatter(nadir_P_latlon[1, :, 0:1000], nadir_P_latlon[0, :, 0:1000], s=5)
+# Set labels and title
+plt.xlabel('Lon')
+plt.ylabel('Lat ')
+plt.title('Ground Track')
+plt.show()
+
+
