@@ -13,7 +13,7 @@ RE = 6371e3  # [m], Earth Radius
 h = 580e3  # [m], Altitude
 a = RE + h  # [m], Semi-major axis
 e = 0  # Eccentricity
-inc = 72 * np.pi / 180  # [rad], Inclination
+inc = 72.6 * np.pi / 180  # [rad], Inclination
 om = 0 * np.pi / 180  # [rad], Argument of the perigee
 
 # Twin data
@@ -28,11 +28,11 @@ K = (RE / (a * (1 - e ** 2))) ** 2
 # Sensor info (Simera)
 h_s = 500e3  # [m], Altitude at which the sensor information is given
 d_ac = 120e3  # [m], Swath width
-d_al = 120e3  # [m], Along distance: used only for the simulation as the scanner is pushbroom
+d_al = 240e3  # [m], Along distance: used only for the simulation as the scanner is pushbroom
 
 # Times
 v_s = np.sqrt(mu / a)  # [m/s], Satellite velocity in a circular orbit
-Dt = a / RE * d_al / v_s   # [s], Timestep
+Dt = a / RE * d_al * h / h_s / v_s   # [s], Timestep
 t_s = 24 * 3600  # [s], Time span of the simulation duration
 time_array_initial = np.array([2023, 1, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
 T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
@@ -374,10 +374,22 @@ def ecef2latlon(const_m_ecef):
         y, [m] = const_m[:, 1]
         z, [m] = const_m[:, 2]
     """
-    lat = np.arcsin(const_m_ecef[:, 2]/RE)
-    lon = np.arcsin(const_m_ecef[:, 1] / (RE * np.cos(lat)))
 
-    target_m_ll = np.array([lat, lon])
+
+    # calculate the right ascension and the declination (latitude)
+    # from the geocentric equatorial position vector
+
+    l = const_m_ecef[:, 0] / LA.norm(const_m_ecef, axis=1)  # direction cosine
+    m = const_m_ecef[:, 1] / LA.norm(const_m_ecef, axis=1)  # direction cosine
+    n = const_m_ecef[:, 2] / LA.norm(const_m_ecef, axis=1)  # direction cosine
+
+    dec = np.arcsin(n)  # [rad] declination (latitude)
+
+    ra = 2 * np.pi - np.arccos(l / np.cos(dec))  # [rad] right ascension (longitude)
+    ra[m > 0] = np.arccos(l[m > 0] / np.cos(dec[m > 0]))  # [rad] right ascension (longitude)
+    ra = ra - np.pi
+
+    target_m_ll = np.array([dec, ra])
 
     return target_m_ll
 
@@ -442,14 +454,14 @@ def projections(const_m_ECEF, target_m_ECEF):  # D modified
     return p1, p2, p3
 
 
-def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
-    dist_tol = 20  # [km] error tolerance in the cone sensor
+def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):
+    dist_tol = 20  # [km] error tolerance in the sensor
     alf_tol = np.arctan(dist_tol / RE)
 
     p1, p2, p3 = projections(const_m_ECEF, target_m_ECEF)
 
     # If the cosine is negative, means the satellite is in the other side of the Earth, thus not visible
-    mask_p1 = p1 > 0  # Boolean, mask_p1(i)=True if p1(i)>0, p1=tr.ur must be >0 always
+    mask_p1 = p1 > 0  # Boolean, mask_p1(i)=True if p1(i)>0
 
     # ACROSS
     filt_steps_ac = np.absolute(p3) / p1 <= np.tan(a_alfa - alf_tol)  # Boolean, True if tan(alpha_t)<=tan(alpha_s)
@@ -465,7 +477,7 @@ def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
     return filt_steps
 
 
-def filt_pop(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
+def filt_pop(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):
 
     filt_steps = filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta)  # Boolean matrix: (N_TS x N_targets)
     # True if target is covered
@@ -506,6 +518,23 @@ def propagation(const_m_OE):
     return const_m_OE_new
 
 
+def propagation_np(const_m_OE):
+    """
+    IN:
+    :param const_m_OE: Constellation matrix with OEs of previous timestep (a, e, i, om, Om, M)
+
+    OUT:
+    :return: const_m_OE_new: Constellation matrix with new OEs
+    """
+
+    th_dot = n0
+
+    const_m_OE_new = const_m_OE.copy()  # a, e, i: no change
+    const_m_OE_new[:, 5] += Dt * th_dot  # New mean anomaly
+
+    return const_m_OE_new
+
+
 def addTime(time_array, Ddt):
     # Y = time_array[0]  # year
     # Mo = time_array[1]  # month
@@ -526,7 +555,7 @@ def addTime(time_array, Ddt):
 
     if time_array[3] > 24:
         time_array[3] -= 24
-        time_array[2] += 1  # Add 1 day, Only until days
+        time_array[2] += 1  # Add 1 day, Only done until days
 
     return ()
 
@@ -549,13 +578,14 @@ an_beta = an_beta.T
 # All pairs N_0 & N_s0:
 N_0 = 4
 N_s0 = 11
-N_c = 1
+N_c = 4
 num_const = 1
 cc = 0  # Count to keep track of the loops at end
 kk = 0  # Count to keep track of the loops at beginning
 
 # Initialize coverage matrix:
-m_t, w = read_targets(time_array_initial)
+# m_t, w = read_targets(time_array_initial)
+m_t = pd.read_csv("LatLon_FF.csv").to_numpy()
 N_targets = m_t.shape[0]
 N_Dt = np.arange(1, t_s + 1, Dt).shape[0]  # Number of time-steps
 Targets_Dt = np.zeros([N_targets, N_Dt], dtype=bool)  # Coverage matrix (N_targets x N_TimeSteps)
@@ -615,7 +645,9 @@ while t <= t_s:
 
     # 4. TARGET LIST
     # Read target list:
-    target_LatLon, weight = read_targets(time_array_initial)  # Lat-Lon (N_targets,2) // Weight: (N_targets,1)
+    # target_LatLon, weight = read_targets(time_array_initial)  # Lat-Lon (N_targets,2) // Weight: (N_targets,1)
+    target_LatLon = pd.read_csv("LatLon_FF.csv").to_numpy()
+
     # Transform target matrix: LatLon to ECEF:
     target_ECEF = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
 
@@ -668,15 +700,15 @@ ax.set_title('Average seen targets per time step')
 
 # FIGURE 2: Map
 # Read the CSV file
-data = pd.read_csv('winter.csv')
+data = pd.read_csv("LatLon_FF.csv")
 # data['Visits0'] = num_visits[:, 0].tolist()  # Add first constellation
 # data['Visits1'] = num_visits[:, 1].tolist()  # Add second constellation
 # data['Visits2'] = num_visits[:, 2].tolist()  # Add third constellation
 data['Visits3'] = num_visits[:, 0].tolist()  # Add forth constellation
 
 # #
-fig = px.scatter_geo(data, lat='Lat', lon='Lon', color="Visits3")
-fig.show()
+# fig = px.scatter_geo(data, lat='Lat', lon='Lon', color="Visits3")
+# fig.show()
 # #
 
 fig2 = plt.figure()
@@ -705,11 +737,34 @@ plt.show()
 
 # Plot all satellites,the first 200 timestep
 fig4 = plt.figure()
-plt.scatter(nadir_P_latlon[1, :, 0:1000], nadir_P_latlon[0, :, 0:1000], s=5)
+plt.scatter(nadir_P_latlon[1, :, 0:1000]*180/np.pi, nadir_P_latlon[0, :, 0:1000]*180/np.pi, s=0.5)
 # Set labels and title
 plt.xlabel('Lon')
 plt.ylabel('Lat ')
 plt.title('Ground Track')
 plt.show()
 
+fig5 = plt.figure()
+plt.scatter(nadir_P_latlon[1, 0, :]*180/np.pi, nadir_P_latlon[0, 0, :]*180/np.pi, s=0.5)  # Sat 1
+plt.scatter(nadir_P_latlon[1, 11, :]*180/np.pi, nadir_P_latlon[0, 11, :]*180/np.pi, s=0.5)  # Sat 12
+plt.scatter(nadir_P_latlon[1, 22, :]*180/np.pi, nadir_P_latlon[0, 22, :]*180/np.pi, s=0.5)  # Sat 23
+plt.scatter(nadir_P_latlon[1, 33, :]*180/np.pi, nadir_P_latlon[0, 33, :]*180/np.pi, s=0.5)  # Sat 34
+plt.scatter(data['Lon'], data['Lat'], c=data['Visits3'], cmap='viridis', s=50)
+plt.colorbar(label='Column 3')
+plt.xlabel('Lon')
+plt.ylabel('Lat ')
+plt.show()
 
+
+from mpl_toolkits.basemap import Basemap
+
+fig7 = plt.figure()
+lats = data['Lat'].tolist()
+lons = data['Lon'].tolist()
+values = data['Visits3'].tolist()
+m = Basemap(projection='mill',lon_0=0)
+m.drawcoastlines(linewidth=0.5)
+# m.scatter(nadir_P_latlon[1, 0, :]*180/np.pi, nadir_P_latlon[0, 0, :]*180/np.pi, latlon=True, s=0.5)  # Sat 1
+m.scatter(lons, lats, latlon=True, c=values, alpha=0.7)
+plt.colorbar(label='Value')
+plt.show()

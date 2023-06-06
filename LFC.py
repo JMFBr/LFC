@@ -33,7 +33,7 @@ d_al = 120e3  # [m], Along distance: used only for the simulation as the scanner
 
 # Times
 v_s = np.sqrt(mu/a)  # [m/s], Satellite velocity in a circular orbit
-Dt = a / RE * d_al / v_s  # [s], Timestep
+Dt = a / RE * d_al * h / h_s / v_s   # [s], Timestep
 t_s = 24*3600  # [s], Time span of the simulation duration
 time_array_initial = np.array([2023, 6, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
 T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
@@ -523,9 +523,9 @@ eta = a / RE
 f_acr = solidAngle(h_s, d_ac)  # [rad]
 f_alo = solidAngle(h_s, d_al)  # [rad]
 
-an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))  # Across angle
+an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))  # Across sensor view angle
 an_alfa = an_alfa.T
-an_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))  # Along angle
+an_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))  # Along sensor view angle
 an_beta = an_beta.T
 
 # All pairs N_0 & N_s0:
@@ -535,7 +535,7 @@ kk = 0  # Count to keep track of the loops at beginning
 
 # Initialize coverage matrix:
 m_t, w = read_targets(time_array_initial)
-N_targets = m_t.shape[0]
+N_targets = m_t.shape[0]  # Number of targets
 N_Dt = np.arange(1, t_s + 1, Dt).shape[0]  # Number of time-steps
 Targets_Dt = np.zeros([N_targets, N_Dt], dtype=bool)  # Coverage matrix (N_targets x N_TimeSteps)
 
