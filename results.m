@@ -2,20 +2,10 @@ clear; clc; close all
 
 %%
 
-DV_m_r = [11., 11., 11., 22.;
-       4.,  4.,  4.,  2.;
-       1.,  2.,  3.,  1.];
+r_eci = [5.84755331e+06, 1.16128411e+06, -3.57406499e+06];
+v_eci = [-4.09405652e+03, 1.96858544e+03, -6.05868299e+03];
+utc = [2023 1 26 5 43 12];
 
-num_targets_mean = [216.47258904, 372.81252501, 495.92537015, 582.09663866];
+[r_ecef, v_ecef] = eci2ecef(utc,r_eci,v_eci);
 
-figure()
-scatter3(DV_m_r(1, :), DV_m_r(2, :), DV_m_r(3, :), 30, num_targets_mean, 'filled')
-colorbar
-grid on
-xlim([0, 25])
-ylim([0, 5])
-zlim([0, 5])
-xlabel('N_s0');
-ylabel('N_0');
-zlabel('N_c');
-title('Avg targets per time step');
+p = lla2ecef([84.89 60 0])

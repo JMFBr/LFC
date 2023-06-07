@@ -28,11 +28,11 @@ K = (RE / (a * (1 - e ** 2))) ** 2
 # Sensor info (Simera)
 h_s = 500e3  # [m], Altitude at which the sensor information is given
 d_ac = 120e3  # [m], Swath width
-d_al = 240e3  # [m], Along distance: used only for the simulation as the scanner is pushbroom
+d_al = 120e3  # [m], Along distance: used only for the simulation as the scanner is pushbroom
 
 # Times
 v_s = np.sqrt(mu / a)  # [m/s], Satellite velocity in a circular orbit
-Dt = a / RE * d_al * h / h_s / v_s   # [s], Timestep
+Dt = a / RE * d_al * h / h_s / v_s*2   # [s], Timestep
 t_s = 24 * 3600  # [s], Time span of the simulation duration
 time_array_initial = np.array([2023, 1, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
 T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
@@ -451,25 +451,27 @@ def projections(const_m_ECEF, target_m_ECEF):  # D modified
     p2 = np.dot(u_y, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_y and target position vector in ECEF
     p3 = np.dot(u_h, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_h and target position vector in ECEF
 
-    return p1, p2, p3
+    return p1, p2, p3, u_r, u_y, u_h
 
 
 def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):
     dist_tol = 20  # [km] error tolerance in the sensor
     alf_tol = np.arctan(dist_tol / RE)
 
-    p1, p2, p3 = projections(const_m_ECEF, target_m_ECEF)
+    p1, p2, p3, ur, uy, uh = projections(const_m_ECEF, target_m_ECEF)
 
     # If the cosine is negative, means the satellite is in the other side of the Earth, thus not visible
-    mask_p1 = p1 > 0  # Boolean, mask_p1(i)=True if p1(i)>0
+    # mask_p1 = p1 > 0  # Boolean, mask_p1(i)=True if p1(i)>0
 
     # ACROSS
-    filt_steps_ac = np.absolute(p3) / p1 <= np.tan(a_alfa - alf_tol)  # Boolean, True if tan(alpha_t)<=tan(alpha_s)
-    filt_steps_ac[~mask_p1] = False  # Values in mask_p1 that correspond to False are set to False in filt_steps_ac
+    filt_steps_ac1 = np.arctan2(p2, p1) < a_alfa
+    filt_steps_ac2 = np.arctan2(p2, p1) > -a_alfa
+    filt_steps_ac = np.logical_and(filt_steps_ac1, filt_steps_ac2)
 
     # ALONG TRACK
-    filt_steps_al = np.absolute(p2) / p1 <= np.tan(a_beta)
-    filt_steps_al[~mask_p1] = False
+    filt_steps_al1 = np.arctan2(p3, p1) < a_beta
+    filt_steps_al2 = np.arctan2(p3, p1) > -a_beta
+    filt_steps_al = np.logical_and(filt_steps_al1, filt_steps_al2)
 
     filt_steps = np.logical_and(filt_steps_al, filt_steps_ac)  # Account covered targets for along and across angles
     # print('Total num of visible targets at time-step: ', np.sum(filt_steps))
@@ -566,14 +568,15 @@ def addTime(time_array, Ddt):
 # For each constellation, inside the 2nd loop compute distance constraints and coverage
 
 # Sensors coverage parameters:
-eta = a / RE
-f_acr = solidAngle(h_s, d_ac)  # [rad]
-f_alo = solidAngle(h_s, d_al)  # [rad]
+# eta = a / RE
+# f_acr = solidAngle(h_s, d_ac)  # [rad]
+# f_alo = solidAngle(h_s, d_al)  # [rad]
 
-an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))  # Across angle
-an_alfa = an_alfa.T
-an_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))  # Along angle
-an_beta = an_beta.T
+# an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))  # Across angle
+# an_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))  # Along angle
+an_alfa = d_ac / (2 * RE)
+an_beta = d_al / (2 * RE)
+
 
 # All pairs N_0 & N_s0:
 N_0 = 4
@@ -647,9 +650,10 @@ while t <= t_s:
     # Read target list:
     # target_LatLon, weight = read_targets(time_array_initial)  # Lat-Lon (N_targets,2) // Weight: (N_targets,1)
     target_LatLon = pd.read_csv("LatLon_FF.csv").to_numpy()
+    target_LatLon[target_LatLon > 180] -= 360
 
     # Transform target matrix: LatLon to ECEF:
-    target_ECEF = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
+    target_ECEF = latlon2ecef_elips(target_LatLon * np.pi / 180)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
 
     # 5.COVERAGE AND TARGET ACCESS
     Target_Sat = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
@@ -737,7 +741,7 @@ plt.show()
 
 # Plot all satellites,the first 200 timestep
 fig4 = plt.figure()
-plt.scatter(nadir_P_latlon[1, :, 0:1000]*180/np.pi, nadir_P_latlon[0, :, 0:1000]*180/np.pi, s=0.5)
+plt.scatter(nadir_P_latlon[1, :, 0:500]*180/np.pi, nadir_P_latlon[0, :, 0:500]*180/np.pi, s=0.5)
 # Set labels and title
 plt.xlabel('Lon')
 plt.ylabel('Lat ')
@@ -755,6 +759,13 @@ plt.xlabel('Lon')
 plt.ylabel('Lat ')
 plt.show()
 
+fig65 = plt.figure()
+plt.scatter(nadir_P_latlon[1, 0, :]*180/np.pi, nadir_P_latlon[0, 0, :]*180/np.pi, s=0.5)  # Sat 1
+plt.xlabel('Lon')
+plt.ylabel('Lat ')
+plt.show()
+
+
 
 from mpl_toolkits.basemap import Basemap
 
@@ -767,4 +778,7 @@ m.drawcoastlines(linewidth=0.5)
 # m.scatter(nadir_P_latlon[1, 0, :]*180/np.pi, nadir_P_latlon[0, 0, :]*180/np.pi, latlon=True, s=0.5)  # Sat 1
 m.scatter(lons, lats, latlon=True, c=values, alpha=0.7)
 plt.colorbar(label='Value')
+plt.xlabel('Lon')
+plt.ylabel('Lat ')
 plt.show()
+
