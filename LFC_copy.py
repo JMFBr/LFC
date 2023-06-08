@@ -32,7 +32,7 @@ d_al = 120e3  # [m], Along distance: used only for the simulation as the scanner
 
 # Times
 v_s = np.sqrt(mu / a)  # [m/s], Satellite velocity in a circular orbit
-Dt = a / RE * d_al * h / h_s / v_s*2   # [s], Timestep
+Dt = a / RE * d_ac * h / h_s / v_s   # [s], Timestep
 t_s = 24 * 3600  # [s], Time span of the simulation duration
 time_array_initial = np.array([2023, 1, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
 T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
@@ -451,17 +451,14 @@ def projections(const_m_ECEF, target_m_ECEF):  # D modified
     p2 = np.dot(u_y, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_y and target position vector in ECEF
     p3 = np.dot(u_h, u_r_t.T)  # (N_targets, N_TS), cos(angle) bw u_h and target position vector in ECEF
 
-    return p1, p2, p3, u_r, u_y, u_h
+    return p1, p2, p3
 
 
 def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):
     dist_tol = 20  # [km] error tolerance in the sensor
     alf_tol = np.arctan(dist_tol / RE)
 
-    p1, p2, p3, ur, uy, uh = projections(const_m_ECEF, target_m_ECEF)
-
-    # If the cosine is negative, means the satellite is in the other side of the Earth, thus not visible
-    # mask_p1 = p1 > 0  # Boolean, mask_p1(i)=True if p1(i)>0
+    p1, p2, p3 = projections(const_m_ECEF, target_m_ECEF)
 
     # ACROSS
     filt_steps_ac1 = np.arctan2(p2, p1) < a_alfa
@@ -710,7 +707,7 @@ data = pd.read_csv("LatLon_FF.csv")
 # data['Visits2'] = num_visits[:, 2].tolist()  # Add third constellation
 data['Visits3'] = num_visits[:, 0].tolist()  # Add forth constellation
 
-# #
+# # #
 # fig = px.scatter_geo(data, lat='Lat', lon='Lon', color="Visits3")
 # fig.show()
 # #
@@ -777,7 +774,19 @@ m = Basemap(projection='mill',lon_0=0)
 m.drawcoastlines(linewidth=0.5)
 # m.scatter(nadir_P_latlon[1, 0, :]*180/np.pi, nadir_P_latlon[0, 0, :]*180/np.pi, latlon=True, s=0.5)  # Sat 1
 m.scatter(lons, lats, latlon=True, c=values, alpha=0.7)
-plt.colorbar(label='Value')
+plt.colorbar(label='Visits in 24h')
+plt.xlabel('Lon')
+plt.ylabel('Lat ')
+plt.show()
+
+
+fig8 = plt.figure()
+m = Basemap(projection='mill',lon_0=0)
+m.drawcoastlines(linewidth=0.5)
+m.scatter(nadir_P_latlon[1, 0, 0:285]*180/np.pi, nadir_P_latlon[0, 0, 0:285]*180/np.pi, latlon=True, s=0.5, color=(0.6, 0.6, 1.0))  # Sat 1
+m.scatter(nadir_P_latlon[1, 11, 0:285]*180/np.pi, nadir_P_latlon[0, 11, 0:285]*180/np.pi, latlon=True, s=0.5, color=(0.6, 0.6, 1.0))  # Sat 12
+m.scatter(nadir_P_latlon[1, 22, 0:285]*180/np.pi, nadir_P_latlon[0, 22, 0:285]*180/np.pi, latlon=True, s=0.5, color=(0.6, 0.6, 1.0))  # Sat 23
+m.scatter(nadir_P_latlon[1, 33, 0:285]*180/np.pi, nadir_P_latlon[0, 33, 0:285]*180/np.pi, latlon=True, s=0.5, color=(0.6, 0.6, 1.0))  # Sat 34
 plt.xlabel('Lon')
 plt.ylabel('Lat ')
 plt.show()

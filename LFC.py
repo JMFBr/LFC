@@ -33,8 +33,8 @@ d_al = 120e3  # [m], Along distance: used only for the simulation as the scanner
 
 # Times
 v_s = np.sqrt(mu/a)  # [m/s], Satellite velocity in a circular orbit
-Dt = a / RE * d_al * h / h_s / v_s   # [s], Timestep
-t_s = 24*3600  # [s], Time span of the simulation duration
+Dt = a / RE * d_ac * h / h_s / v_s   # [s], Timestep
+t_s = 24 * 3600  # [s], Time span of the simulation duration
 time_array_initial = np.array([2023, 6, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
 T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
 
@@ -429,18 +429,15 @@ def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
 
     p1, p2, p3 = projections(const_m_ECEF, target_m_ECEF)
 
-    # If the cosine is negative, means the satellite is in the other side of the Earth, thus not visible
-    mask_p1 = p1 > 0  # Boolean, mask_p1(i)=True if p1(i)>0, p1=tr.ur must be >0 always
-
     # ACROSS
-    filt_steps_ac = np.absolute(p3) / p1 <= np.tan(a_alfa)  # Boolean, True if tan(alpha_t)<=tan(alpha_s)
-    filt_steps_ac[~mask_p1] = False  # Values in mask_p1 that correspond to False are set to False in filt_steps_ac
-    # print('Number of visible targets by Across filter: ', np.sum(filt_steps_ac))
+    filt_steps_ac1 = np.arctan2(p2, p1) < a_alfa
+    filt_steps_ac2 = np.arctan2(p2, p1) > -a_alfa
+    filt_steps_ac = np.logical_and(filt_steps_ac1, filt_steps_ac2)
 
     # ALONG TRACK
-    filt_steps_al = np.absolute(p2) / p1 <= np.tan(a_beta)
-    filt_steps_al[~mask_p1] = False
-    # print('Number of visible targets by Along filter: ', np.sum(filt_steps_al))
+    filt_steps_al1 = np.arctan2(p3, p1) < a_beta
+    filt_steps_al2 = np.arctan2(p3, p1) > -a_beta
+    filt_steps_al = np.logical_and(filt_steps_al1, filt_steps_al2)
 
     filt_steps = np.logical_and(filt_steps_al, filt_steps_ac)  # Account covered targets for along and across angles
     # print('Total num of visible targets at time-step: ', np.sum(filt_steps))
@@ -487,6 +484,25 @@ def propagation(const_m_OE):
     return const_m_OE_new
 
 
+def propagation_np(const_m_OE):
+    """
+    Propagate constellation without perturbations
+
+    IN:
+    :param const_m_OE: Constellation matrix with OEs of previous timestep (a, e, i, om, Om, M)
+
+    OUT:
+    :return: const_m_OE_new: Constellation matrix with new OEs
+    """
+
+    th_dot = n0
+
+    const_m_OE_new = const_m_OE.copy()  # a, e, i: no change
+    const_m_OE_new[:, 5] += Dt * th_dot  # New mean anomaly
+
+    return const_m_OE_new
+
+
 def addTime(time_array, Ddt):
 
     # Y = time_array[0]  # year
@@ -519,14 +535,11 @@ def addTime(time_array, Ddt):
     # For each constellation, inside the 2nd loop compute distance constraints and coverage
 
 # Sensors coverage parameters:
-eta = a / RE
-f_acr = solidAngle(h_s, d_ac)  # [rad]
-f_alo = solidAngle(h_s, d_al)  # [rad]
 
-an_alfa = - f_acr + np.arcsin(eta * np.sin(f_acr))  # Across sensor view angle
-an_alfa = an_alfa.T
-an_beta = - f_alo + np.arcsin(eta * np.sin(f_alo))  # Along sensor view angle
-an_beta = an_beta.T
+# f_acr = solidAngle(h_s, d_ac)  # [rad]
+# f_alo = solidAngle(h_s, d_al)  # [rad]
+an_alfa = d_ac / (2 * RE)  # [rad], Across sensor view angle
+an_beta = d_al / (2 * RE)  # [rad], Along sensor view angle
 
 # All pairs N_0 & N_s0:
 N_0, N_s0, num_const = NumSats(N_TS)
