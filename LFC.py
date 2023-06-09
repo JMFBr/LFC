@@ -147,7 +147,7 @@ def NumSats(n_TS):
 
     n_s0 = n_TS/n_0  # Number of sats/plane, dim(1x#multiples)
 
-    num_fam_const = int(np.sum(n_s0)-n_s0.shape[0])  # Number of constellations in the family
+    num_fam_const = int(np.sum(n_s0))  # Number of constellations in the family
 
     print('Number of pairs: ', n_s0.shape[0])
     print('Number of constellations: ', num_fam_const)
@@ -614,6 +614,8 @@ for j in range(len(N_0)):
             # target_LatLon, weight = read_targets(time_array_initial)  # Lat-Lon (N_targets,2) // Weight: (N_targets,1)
             target_LatLon = pd.read_csv("LatLon_FF.csv").to_numpy()
             target_LatLon[target_LatLon > 180] -= 360
+            target_LatLon = target_LatLon * np.pi / 180  # [rad]
+
             # Transform target matrix: LatLon to ECEF:
             target_ECEF = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
 
@@ -639,9 +641,9 @@ for j in range(len(N_0)):
 cov_3d_r = cov_3d[:, :, 0:cc]  # Coverage matrix for constellations within the constraints
 DV_m_r = DV_m[:, 0:cc]  # N_s0 N0 Nc
 
-num_visits = np.sum(cov_3d_r, axis=1)  # Number of times each target is visited
-num_targets = np.sum(cov_3d_r, axis=0)  # Number of targets seen in each time-step
-num_targets_mean = np.mean(num_targets, axis=0)  # Average number of targets seen in each timestep
+num_visits = np.sum(cov_3d_r, axis=1)  # Number of times each target is visited for each constellation
+num_targets = np.sum(cov_3d_r, axis=0)  # Number of targets seen in each time-step for each constellation
+num_targets_mean = np.mean(num_targets, axis=0)  # Average number of targets seen in each timestep per constellation
 
 
 # Figure 1: 3D scatter, mean visits per timestep
@@ -670,7 +672,7 @@ plt.show()
 
 # Figure 2: Map
 # Read the CSV file
-data = pd.read_csv('spring.csv')
+data = pd.read_csv("LatLon_FF.csv")
 # data['Visits0'] = num_visits[:, 0].tolist()  # Add first constellation
 # data['Visits1'] = num_visits[:, 1].tolist()  # Add second constellation
 # data['Visits2'] = num_visits[:, 2].tolist()  # Add third constellation

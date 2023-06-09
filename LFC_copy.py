@@ -576,9 +576,9 @@ an_beta = d_al / (2 * RE)
 
 
 # All pairs N_0 & N_s0:
-N_0 = 4
-N_s0 = 11
-N_c = 4
+N_0 = 1
+N_s0 = 44
+N_c = 1
 num_const = 1
 cc = 0  # Count to keep track of the loops at end
 kk = 0  # Count to keep track of the loops at beginning
@@ -648,9 +648,10 @@ while t <= t_s:
     # target_LatLon, weight = read_targets(time_array_initial)  # Lat-Lon (N_targets,2) // Weight: (N_targets,1)
     target_LatLon = pd.read_csv("LatLon_FF.csv").to_numpy()
     target_LatLon[target_LatLon > 180] -= 360
+    target_LatLon = target_LatLon * np.pi / 180  # [rad]
 
     # Transform target matrix: LatLon to ECEF:
-    target_ECEF = latlon2ecef_elips(target_LatLon * np.pi / 180)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
+    target_ECEF = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
 
     # 5.COVERAGE AND TARGET ACCESS
     Target_Sat = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
