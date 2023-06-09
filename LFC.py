@@ -35,7 +35,6 @@ d_al = 120e3  # [m], Along distance: used only for the simulation as the scanner
 v_s = np.sqrt(mu/a)  # [m/s], Satellite velocity in a circular orbit
 Dt = a / RE * d_ac * h / h_s / v_s   # [s], Timestep
 t_s = 24 * 3600  # [s], Time span of the simulation duration
-time_array_initial = np.array([2023, 6, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
 T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
 
 
@@ -594,12 +593,13 @@ for j in range(len(N_0)):
         kk += 1
         print('kk: ', kk)
 
+        # Restart the times for the new constellation
+        time_array_initial = np.array([2023, 6, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
+        t = 0
+        tm = 0  # Index for coverage matrix
+
         # 1. CONSTELLATION
         C, Omega, M, Omega_m, M_m = LFC(N_0[j], N_s0[j], N_c[k])
-
-        # Restart the times for the new constellation
-        t = 0  # np.arange(1, t_s + 1, Dt)
-        tm = 0  # Index for coverage matrix
 
         # 2. CONSTRAINTS
         # MIN Distance constraint:
