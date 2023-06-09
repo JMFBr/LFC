@@ -36,6 +36,7 @@ v_s = np.sqrt(mu/a)  # [m/s], Satellite velocity in a circular orbit
 Dt = a / RE * d_ac * h / h_s / v_s   # [s], Timestep
 t_s = 24 * 3600  # [s], Time span of the simulation duration
 T = 2 * np.pi * np.sqrt(a ** 3 / mu)  # [s], Orbital period
+time_array_initial = np.array([2023, 6, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
 
 
 # CONSTRAINTS
@@ -594,7 +595,6 @@ for j in range(len(N_0)):
         print('kk: ', kk)
 
         # Restart the times for the new constellation
-        time_array_initial = np.array([2023, 6, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
         t = 0
         tm = 0  # Index for coverage matrix
 
@@ -667,6 +667,8 @@ for j in range(len(N_0)):
         # Count
         cc += 1  # Final cc = Num of Constellations for which results were computed
         print('cc:', cc)
+
+        time_array_initial = np.array([2023, 6, 26, 5, 43, 12])  # year, month, day, hour, minute, second (UTC)
 
 
 # RESULTS:
