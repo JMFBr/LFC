@@ -535,9 +535,8 @@ def addTime(time_array, Ddt):
     # For each constellation, inside the 2nd loop compute distance constraints and coverage
 
 # Sensors coverage parameters:
-
-# f_acr = solidAngle(h_s, d_ac)  # [rad]
-# f_alo = solidAngle(h_s, d_al)  # [rad]
+# f_acr = solidAngle(h_s, d_ac)  # [rad], Solid angle across
+# f_alo = solidAngle(h_s, d_al)  # [rad], Solid angle along
 an_alfa = d_ac / (2 * RE)  # [rad], Across sensor view angle
 an_beta = d_al / (2 * RE)  # [rad], Along sensor view angle
 
@@ -547,8 +546,8 @@ cc = 0  # Count to keep track of the loops at end
 kk = 0  # Count to keep track of the loops at beginning
 
 # Initialize coverage matrix:
-m_t, w = read_targets(time_array_initial)
-N_targets = m_t.shape[0]  # Number of targets
+m_t, we = read_targets(time_array_initial)
+N_targets = 1500  # m_t.shape[0]  # Number of targets
 N_Dt = np.arange(1, t_s + 1, Dt).shape[0]  # Number of time-steps
 Targets_Dt = np.zeros([N_targets, N_Dt], dtype=bool)  # Coverage matrix (N_targets x N_TimeSteps)
 
@@ -612,7 +611,9 @@ for j in range(len(N_0)):
 
             # 4. TARGET LIST
             # Read target list:
-            target_LatLon, weight = read_targets(time_array_initial)  # Lat-Lon (N_targets,2) // Weight: (N_targets,1)
+            # target_LatLon, weight = read_targets(time_array_initial)  # Lat-Lon (N_targets,2) // Weight: (N_targets,1)
+            target_LatLon = pd.read_csv("LatLon_FF.csv").to_numpy()
+            target_LatLon[target_LatLon > 180] -= 360
             # Transform target matrix: LatLon to ECEF:
             target_ECEF = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
 
