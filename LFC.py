@@ -18,7 +18,7 @@ inc = 72 * np.pi/180  # [rad], Inclination
 om = 0 * np.pi/180  # [rad], Argument of the perigee
 
 # Twin data
-twin_d = 2*60  # [s], Twin fixed separation distance WAC-NAC
+twin_d = 2 * 60  # [s], Twin fixed separation distance WAC-NAC
 twin_d = twin_d * np.sqrt(mu / a ** 3) * (RE + h)  # [m]
 
 # Orbit propagation data
@@ -245,9 +245,11 @@ def kep2eci(const_m_OE):  # R modified for matrices
     # Transformation matrix from peri-focal to geocentric equatorial coordinates. Dimensions: (3 x 3 x N_TS)
     R_pqw_to_eci = np.array([
         [np.cos(Omega_v) * np.cos(omega_v) - np.sin(Omega_v) * np.sin(omega_v) * np.cos(i_v),
-         -np.cos(Omega_v) * np.sin(omega_v) - np.sin(Omega_v) * np.cos(omega_v) * np.cos(i_v), np.sin(Omega_v) * np.sin(i_v)],
+         -np.cos(Omega_v) * np.sin(omega_v) - np.sin(Omega_v) * np.cos(omega_v) * np.cos(i_v),
+         np.sin(Omega_v) * np.sin(i_v)],
         [np.sin(Omega_v) * np.cos(omega_v) + np.cos(Omega_v) * np.sin(omega_v) * np.cos(i_v),
-         -np.sin(Omega_v) * np.sin(omega_v) + np.cos(Omega_v) * np.cos(omega_v) * np.cos(i_v), -np.cos(Omega_v) * np.sin(i_v)],
+         -np.sin(Omega_v) * np.sin(omega_v) + np.cos(Omega_v) * np.cos(omega_v) * np.cos(i_v),
+         -np.cos(Omega_v) * np.sin(i_v)],
         [np.sin(i_v) * np.sin(omega_v), np.sin(i_v) * np.cos(omega_v), np.cos(i_v)]
     ])
 
@@ -289,7 +291,7 @@ def eci2ecef(time_array, const_m_ECI):
     se = time_array[5]  # seconds (in UTC time)
 
     jd = 1721013.5 + 367 * Y - int(7 / 4 * (Y + int((Mo + 9) / 12))) + int(275 * Mo / 9) + D + (
-                60 * ho + mi) / 1440 + se / 86400
+            60 * ho + mi) / 1440 + se / 86400
 
     # Calculate the number of days since J2000.0
     days_since_J2000 = jd - 2451545.0
@@ -314,7 +316,8 @@ def eci2ecef(time_array, const_m_ECI):
     v_ecef = np.zeros((N_TS, 3))
     for k in range(N_TS):
         r_ecef[k, :] = np.dot(np.transpose(R_ECEF2ECI), np.array(const_m_ECI[k, 0:3]))
-        v_ecef[k, :] = np.dot(np.transpose(R_ECEF2ECI), np.array(const_m_ECI[k, 3:])) - np.cross([0, 0, w], r_ecef[k, :])
+        v_ecef[k, :] = np.dot(np.transpose(R_ECEF2ECI), np.array(const_m_ECI[k, 3:])) - np.cross([0, 0, w],
+                                                                                                 r_ecef[k, :])
 
     const_m_ECEF = np.concatenate((r_ecef, v_ecef), axis=1)
 
@@ -394,6 +397,33 @@ def latlon2ecef_elips(target_m):
     return target_m_r
 
 
+def ecef2latlon(const_m_ecef):
+    """
+    Transform coordinates from Lat-Lon to ECEF:
+        x, [m] = const_m[:, 0]
+        y, [m] = const_m[:, 1]
+        z, [m] = const_m[:, 2]
+    """
+
+
+    # calculate the right ascension and the declination (latitude)
+    # from the geocentric equatorial position vector
+
+    l = const_m_ecef[:, 0] / LA.norm(const_m_ecef, axis=1)  # direction cosine
+    m = const_m_ecef[:, 1] / LA.norm(const_m_ecef, axis=1)  # direction cosine
+    n = const_m_ecef[:, 2] / LA.norm(const_m_ecef, axis=1)  # direction cosine
+
+    dec = np.arcsin(n)  # [rad] declination (latitude)
+
+    ra = 2 * np.pi - np.arccos(l / np.cos(dec))  # [rad] right ascension (longitude)
+    ra[m > 0] = np.arccos(l[m > 0] / np.cos(dec[m > 0]))  # [rad] right ascension (longitude)
+    ra = ra - np.pi
+
+    target_m_ll = np.array([dec, ra])
+
+    return target_m_ll
+
+
 # COVERAGE
 def unit_v(v):  # D
     u_v = v / LA.norm(v, axis=0)  # direction cosine
@@ -413,8 +443,8 @@ def projections(const_m_ECEF, target_m_ECEF):  # D modified
 
     u_r_t = np.apply_along_axis(unit_v, 1, target_m_ECEF)  # (N_targets, 3), unit vector in target direction ECEF
 
-    u_h = np.cross(u_r, u_v, axisa=1, axisb=1, axisc=1) # (N_TS, 3)
-    u_y = np.cross(u_h, u_r, axisa=1, axisb=1, axisc=1) # (N_TS, 3)
+    u_h = np.cross(u_r, u_v, axisa=1, axisb=1, axisc=1)  # (N_TS, 3)
+    u_y = np.cross(u_h, u_r, axisa=1, axisb=1, axisc=1)  # (N_TS, 3)
     # New system reference calculated
 
     # Target projection on new system of reference:
@@ -425,7 +455,9 @@ def projections(const_m_ECEF, target_m_ECEF):  # D modified
     return p1, p2, p3
 
 
-def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
+def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):
+    dist_tol = 20  # [km] error tolerance in the sensor
+    alf_tol = np.arctan(dist_tol / RE)
 
     p1, p2, p3 = projections(const_m_ECEF, target_m_ECEF)
 
@@ -445,7 +477,7 @@ def filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
     return filt_steps
 
 
-def filt_pop(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):  # D modified
+def filt_pop(const_m_ECEF, target_m_ECEF, a_alfa, a_beta):
 
     filt_steps = filt_steps_fun(const_m_ECEF, target_m_ECEF, a_alfa, a_beta)  # Boolean matrix: (N_TS x N_targets)
     # True if target is covered
@@ -467,13 +499,15 @@ def propagation(const_m_OE):
     :return: const_m_OE_new: Constellation matrix with new OEs
     """
 
-    om_dot = 3/2 * J2 * K * n0 * (2 - 5/2*np.sin(inc)**2)  # [rad/s], Argument of the perigee change rate due to J2
+    om_dot = 3 / 2 * J2 * K * n0 * (
+                2 - 5 / 2 * np.sin(inc) ** 2)  # [rad/s], Argument of the perigee change rate due to J2
     Om_dot = -3 / 2 * J2 * K * n0 * np.cos(inc)  # [rad/s],  RAAN change rate due to J2
-    th_dot = n0 * (1 + 3/4 * J2 * K * (2 - 3*np.sin(inc)**2) * np.sqrt(1 - e**2))  # True anomaly change rate due to J2
+    th_dot = n0 * (1 + 3 / 4 * J2 * K * (2 - 3 * np.sin(inc) ** 2) * np.sqrt(
+        1 - e ** 2))  # True anomaly change rate due to J2
 
     # Change True anomaly to Eccentric anomaly to Mean anomaly:
     D_th = th_dot * Dt  # [rad], Delta true anomaly //  Dt: Time step, computed at the start of the code
-    D_E = np.arcsin((np.sin(D_th) * np.sqrt(1 - e**2))/(1 + e*np.cos(D_th)))  # [rad], Delta eccentric anomaly
+    D_E = np.arcsin((np.sin(D_th) * np.sqrt(1 - e ** 2)) / (1 + e * np.cos(D_th)))  # [rad], Delta eccentric anomaly
     D_M = D_E - e * np.sin(D_E)  # [rad], Delta mean anomaly
 
     const_m_OE_new = const_m_OE.copy()  # a, e, i: no change
@@ -486,8 +520,6 @@ def propagation(const_m_OE):
 
 def propagation_np(const_m_OE):
     """
-    Propagate constellation without perturbations
-
     IN:
     :param const_m_OE: Constellation matrix with OEs of previous timestep (a, e, i, om, Om, M)
 
@@ -504,7 +536,6 @@ def propagation_np(const_m_OE):
 
 
 def addTime(time_array, Ddt):
-
     # Y = time_array[0]  # year
     # Mo = time_array[1]  # month
     # D = time_array[2]  # day
@@ -524,7 +555,7 @@ def addTime(time_array, Ddt):
 
     if time_array[3] > 24:
         time_array[3] -= 24
-        time_array[2] += 1  # Add 1 day, Only until days
+        time_array[2] += 1  # Add 1 day, Only done until days
 
     return ()
 
@@ -621,13 +652,14 @@ for j in range(len(N_0)):
 
             # 5.COVERAGE AND TARGET ACCESS
             Target_Sat = filt_steps_fun(const_ECEF, target_ECEF, an_alfa, an_beta)
-            cov = filt_pop(const_ECEF, target_ECEF, an_alfa, an_beta)
+            cov = filt_pop(const_ECEF, target_ECEF, an_alfa, an_beta)  # IDs of seen targets
             Targets_Dt[cov[1, :], tm] = True  # Coverage matrix: (Num targets x TimeStep)
             tm += 1
 
             # 6.NEW TIME FOR NEXT LOOP
             addTime(time_array_initial, Dt)  # Time array of new timestep
             const_OE = propagation(const_OE)  # Propagate constellation to next timestep
+            cov = 0  # Restart cov matrix
             t += Dt
 
         cov_3d[:, :, cc] = Targets_Dt  # 3D coverage matrix (Num targets x TimeStep x Constellation)
