@@ -580,7 +580,6 @@ kk = 0  # Count to keep track of the loops at beginning
 m_t, we = read_targets(time_array_initial)
 N_targets = 1500  # m_t.shape[0]  # Number of targets
 N_Dt = np.arange(1, t_s + 1, Dt).shape[0]  # Number of time-steps
-Targets_Dt = np.zeros([N_targets, N_Dt], dtype=bool)  # Coverage matrix (N_targets x N_TimeSteps)
 
 cov_3d = np.zeros([N_targets, N_Dt, num_const], dtype=bool)  # 3Dcoverage matrix (N_targets xN_TimeSteps xConstellation)
 DV_m = np.zeros([3, num_const])  # Initialize DVs matrix: (N_s0 N0 Nc x Constellation)
@@ -597,6 +596,9 @@ for j in range(len(N_0)):
         # Restart the times for the new constellation
         t = 0
         tm = 0  # Index for coverage matrix
+
+        # Initialize coverage matrix
+        Targets_Dt = np.zeros([N_targets, N_Dt], dtype=bool)  # Coverage matrix (N_targets x N_TimeSteps)
 
         # 1. CONSTELLATION
         C, Omega, M, Omega_m, M_m = LFC(N_0[j], N_s0[j], N_c[k])
