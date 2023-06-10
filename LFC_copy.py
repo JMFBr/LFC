@@ -576,8 +576,8 @@ an_beta = d_al / (2 * RE)
 
 
 # All pairs N_0 & N_s0:
-N_0 = 1
-N_s0 = 44
+N_0 = 4
+N_s0 = 11
 N_c = 1
 num_const = 1
 cc = 0  # Count to keep track of the loops at end
@@ -784,10 +784,10 @@ plt.show()
 fig8 = plt.figure()
 m = Basemap(projection='mill',lon_0=0)
 m.drawcoastlines(linewidth=0.5)
-m.scatter(nadir_P_latlon[1, 0, 0:285]*180/np.pi, nadir_P_latlon[0, 0, 0:285]*180/np.pi, latlon=True, s=0.5, color=(0.6, 0.6, 1.0))  # Sat 1
-m.scatter(nadir_P_latlon[1, 11, 0:285]*180/np.pi, nadir_P_latlon[0, 11, 0:285]*180/np.pi, latlon=True, s=0.5, color=(0.6, 0.6, 1.0))  # Sat 12
-m.scatter(nadir_P_latlon[1, 22, 0:285]*180/np.pi, nadir_P_latlon[0, 22, 0:285]*180/np.pi, latlon=True, s=0.5, color=(0.6, 0.6, 1.0))  # Sat 23
-m.scatter(nadir_P_latlon[1, 33, 0:285]*180/np.pi, nadir_P_latlon[0, 33, 0:285]*180/np.pi, latlon=True, s=0.5, color=(0.6, 0.6, 1.0))  # Sat 34
+m.scatter(nadir_P_latlon[1, 0, 0:290]*180/np.pi, nadir_P_latlon[0, 0, 0:290]*180/np.pi, latlon=True, s=0.5, color='blue')  # Sat 1, color=(0.6, 0.6, 1.0)
+m.scatter(nadir_P_latlon[1, 11, 0:290]*180/np.pi, nadir_P_latlon[0, 11, 0:290]*180/np.pi, latlon=True, s=0.5, color='blue')  # Sat 12
+m.scatter(nadir_P_latlon[1, 22, 0:290]*180/np.pi, nadir_P_latlon[0, 22, 0:290]*180/np.pi, latlon=True, s=0.5, color='blue')  # Sat 23
+m.scatter(nadir_P_latlon[1, 33, 0:290]*180/np.pi, nadir_P_latlon[0, 33, 0:290]*180/np.pi, latlon=True, s=0.5, color='blue')  # Sat 34
 plt.xlabel('Lon')
 plt.ylabel('Lat ')
 plt.show()

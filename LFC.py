@@ -578,7 +578,7 @@ kk = 0  # Count to keep track of the loops at beginning
 
 # Initialize coverage matrix:
 m_t, we = read_targets(time_array_initial)
-N_targets = 1500  # m_t.shape[0]  # Number of targets
+N_targets = m_t.shape[0]  # Number of targets
 N_Dt = np.arange(1, t_s + 1, Dt).shape[0]  # Number of time-steps
 
 cov_3d = np.zeros([N_targets, N_Dt, num_const], dtype=bool)  # 3Dcoverage matrix (N_targets xN_TimeSteps xConstellation)
@@ -644,10 +644,10 @@ for j in range(len(N_0)):
 
             # 4. TARGET LIST
             # Read target list:
-            # target_LatLon, weight = read_targets(time_array_initial)  # Lat-Lon (N_targets,2) // Weight: (N_targets,1)
-            target_LatLon = pd.read_csv("LatLon_FF.csv").to_numpy()
-            target_LatLon[target_LatLon > 180] -= 360
-            target_LatLon = target_LatLon * np.pi / 180  # [rad]
+            target_LatLon, weight = read_targets(time_array_initial)  # Lat-Lon (N_targets,2) // Weight: (N_targets,1)
+            # target_LatLon = pd.read_csv("LatLon_FF.csv").to_numpy()
+            # target_LatLon[target_LatLon > 180] -= 360
+            # target_LatLon = target_LatLon * np.pi / 180  # [rad]
 
             # Transform target matrix: LatLon to ECEF:
             target_ECEF = latlon2ecef_elips(target_LatLon)  # Target matrix in ECEF (N_targets,3): x-y-z, Ellipsoid
@@ -692,17 +692,14 @@ values = num_targets_mean.T
 # Plot the points in 3D space with colors based on values
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
-scatter = ax.scatter(x, y, z, c=values, cmap='viridis')
-
+scatter = ax.scatter(x, y, z, c=values, cmap='viridis', s=100, alpha=0.8)
 # Add a colorbar
 cbar = fig.colorbar(scatter)
-
 # Customize the plot appearance
 ax.set_xlabel('Ns0')
 ax.set_ylabel('N0')
 ax.set_zlabel('Nc')
 ax.set_title('Average seen targets per time step')
-
 plt.show()
 
 
