@@ -604,21 +604,26 @@ for j in range(len(N_0)):
         C, Omega, M, Omega_m, M_m = LFC(N_0[j], N_s0[j], N_c[k])
 
         # 2. CONSTRAINTS
-        # MIN Distance constraint:
+        # MIN Distance inter-plane constraint:
         min_dist = MinDist(Omega_m, M_m)  # [m], Min distance inter-planes
         if min_dist > 2 * twin_d:
             # Discard constellation if minimum distance requirements are not met
-            print('Min distance not fulfilled')
+            print('Min distance inter-plane not fulfilled.')
             continue
 
-        # MAX Distance constraint:
+        # MAX Distance in-plane constraint:
         WAC_dist = 2 * np.pi / N_s0[j] * (RE + h)  # [m], WAC-WAC satellites distance in 1 plane
         NAC_dist = twin_d  # [m], WAC-NAC distance in 1 plane
         max_dist = MaxDist()  # [m], Max distance ISL constraint within 1 plane
-
         if WAC_dist > (NAC_dist + max_dist):
             # Discard constellation if ISL cannot be connected (WAC1-NAC1--WAC2)
             print('Max distance not fulfilled. No ISL connection.')
+            continue
+
+        # MIN Distance in-plane constraint:
+        if WAC_dist < 2 * NAC_dist:
+            # Discard constellation if twin cannot be placed behind
+            print('Min distance in-plane not fulfilled.')
             continue
 
         # Design Variables matrix --> N_s0, N_0, N_c of the constellations within the constraints:
@@ -699,7 +704,7 @@ cbar = fig.colorbar(scatter)
 ax.set_xlabel('Ns0')
 ax.set_ylabel('N0')
 ax.set_zlabel('Nc')
-ax.set_title('Average seen targets per time step')
+ax.set_title('Average number of seen targets per time-step')
 plt.show()
 
 

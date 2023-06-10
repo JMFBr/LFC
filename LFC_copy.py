@@ -576,8 +576,8 @@ an_beta = d_al / (2 * RE)
 
 
 # All pairs N_0 & N_s0:
-N_0 = 4
-N_s0 = 11
+N_0 = 1
+N_s0 = 44
 N_c = 1
 num_const = 1
 cc = 0  # Count to keep track of the loops at end
@@ -601,14 +601,13 @@ t = 0  # np.arange(1, t_s + 1, Dt)
 tm = 0  # Index for coverage matrix
 
 # 2. CONSTRAINTS
-# MIN Distance constraint:
+# MIN Distance inter-plane constraint:
 min_dist = MinDist(Omega_m, M_m)  # [m], Min distance inter-planes
 if min_dist > 2 * twin_d:
     # Discard constellation if minimum distance requirements are not met
-    print('Min distance not fulfilled')
+    print('Min distance inter-plane not fulfilled.')
 
-# MAX Distance constraint:
-
+# MAX Distance in-plane constraint:
 WAC_dist = 2 * np.pi / N_s0 * (RE + h)  # [m], WAC-WAC satellites distance in 1 plane
 NAC_dist = twin_d  # [m], WAC-NAC distance in 1 plane
 max_dist = MaxDist()  # [m], Max distance ISL constraint within 1 plane
@@ -616,6 +615,12 @@ max_dist = MaxDist()  # [m], Max distance ISL constraint within 1 plane
 if WAC_dist > (NAC_dist + max_dist):
     # Discard constellation if ISL cannot be connected (WAC1-NAC1--WAC2)
     print('Max distance not fulfilled. No ISL connection.')
+
+# MIN Distance in-plane constraint:
+if WAC_dist < 2*NAC_dist:
+    # Discard constellation if twin cannot be placed behind
+    print('Min distance in-plane not fulfilled.')
+
 
 # 3. CONSTELLATION MATRIX AND TRANSFORMATIONS
 # Create constellation matrix with all satellites' orbital elements
