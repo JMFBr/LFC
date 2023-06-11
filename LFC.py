@@ -706,8 +706,11 @@ def calculate_mean_diff(arr):
     return rev_time
 
 
-revisit_time = calculate_mean_diff(cov_3d_r[:, :, 0])
-revisit_time = revisit_time * Dt / 60  # [min]
+revisit_time_0 = calculate_mean_diff(cov_3d_r[:, :, 0])
+revisit_time_0 = revisit_time_0 * Dt / 60  # [min]
+
+revisit_time_1 = calculate_mean_diff(cov_3d_r[:, :, 1])
+revisit_time_1 = revisit_time_1 * Dt / 60  # [min]
 
 
 
@@ -735,7 +738,7 @@ plt.show()
 
 # Figure 2: Map
 # Read the CSV file
-data = pd.read_csv("LatLon_FF.csv")
+data = pd.read_csv("spring.csv")
 # data['Visits0'] = num_visits[:, 0].tolist()  # Add first constellation
 # data['Visits1'] = num_visits[:, 1].tolist()  # Add second constellation
 # data['Visits2'] = num_visits[:, 2].tolist()  # Add third constellation
@@ -745,14 +748,16 @@ fig = px.scatter_geo(data,lat='Lat',lon='Lon',
                      color = "Visits3")
 fig.show()
 
-# Figure 3: Lati vs. Revisit time
-data['RevTime0'] = revisit_time[:].tolist()
+# Figure 3: Lat vs. Revisit time
+data['RevTime0'] = revisit_time_0[:].tolist()
+data['RevTime1'] = revisit_time_1[:].tolist()
 
 plt.figure()
-plt.plot(data['RevTime0'], np.absolute(data['Lat']))
+plt.scatter(data['RevTime0'], np.absolute(data['Lat']))
+plt.scatter(data['RevTime1'], np.absolute(data['Lat']))
 plt.grid(True)
 plt.ylabel('Latitude [deg]')
-plt.xlabel('Revisit time [min]')
+plt.xlabel('Mean revisit time [min]')
 plt.show()
 
 
