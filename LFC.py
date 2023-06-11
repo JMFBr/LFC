@@ -687,6 +687,31 @@ num_targets = np.sum(cov_3d_r, axis=0)  # Number of targets seen in each time-st
 num_targets_mean = np.mean(num_targets, axis=0)  # Average number of targets seen in each timestep per constellation
 
 
+# REVISIT TIME
+def calculate_mean_diff(arr):
+    num_rows, num_cols = arr.shape
+    rev_time = np.zeros(num_rows)
+    for i in range(num_rows):
+        prev_column = None
+        differences = []
+        for j in range(num_cols):
+            if arr[i, j]:
+                if prev_column is not None:
+                    diff = j - prev_column
+                    differences.append(diff)
+                prev_column = j
+        if differences:
+            rev_time[i] = np.mean(differences)
+            # rev_time = rev_time * Dt
+    return rev_time
+
+
+revisit_time = calculate_mean_diff(cov_3d_r[:, :, 0])
+revisit_time = revisit_time * Dt / 60  # [min]
+
+
+
+
 # Figure 1: 3D scatter, mean visits per timestep
 # Extract the coordinates and values from the array
 x = DV_m_r[0, :]
@@ -720,6 +745,15 @@ fig = px.scatter_geo(data,lat='Lat',lon='Lon',
                      color = "Visits3")
 fig.show()
 
+# Figure 3: Lati vs. Revisit time
+data['RevTime0'] = revisit_time[:].tolist()
+
+plt.figure()
+plt.plot(data['RevTime0'], np.absolute(data['Lat']))
+plt.grid(True)
+plt.ylabel('Latitude [deg]')
+plt.xlabel('Revisit time [min]')
+plt.show()
 
 
 
